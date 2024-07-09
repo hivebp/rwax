@@ -237,7 +237,7 @@ name rwax::find_asset_pool(
         stakepools_t stakepools = get_stakepools(pool);
         auto stake_itr = stakepools.begin();
         while (stake_itr != stakepools.end() && !found) {
-            if (stake_itr->stake_token == issued_supply.symbol) {
+            if (stake_itr->stake_token == token.symbol) {
                 return pool;
             }
 
@@ -259,7 +259,7 @@ float rwax::get_maximum_factor(vector<TRAITFACTOR> trait_factors) {
 
 asset rwax::calculate_issued_tokens(
     uint64_t asset_id, 
-    int32_t template_id,
+    int32_t template_id
 ) {
     assets_t own_assets = get_assets(get_self());
     auto asset_itr = own_assets.find(asset_id);
@@ -269,13 +269,13 @@ asset rwax::calculate_issued_tokens(
 
     auto template_itr = templates.find(template_id);
 
-    auto schema_itr = schemas.find(templ_itr->schema_name.value);
+    auto schema_itr = schemas.find(template_itr->schema_name.value);
 
     auto template_pool_itr = templpools.find(template_itr->template_id);
 
     auto token_itr = tokens.find(template_pool_itr->token_share.symbol.code().raw());
 
-    auto trait_itr = traitfactors.find(token_itr->token_share.symbol.code().raw());
+    auto trait_itr = traitfactors.find(template_pool_itr->token_share.symbol.code().raw());
 
     float factor = 1;
 
@@ -300,23 +300,23 @@ asset rwax::calculate_issued_tokens(
         for (TRAITFACTOR trait_factor : trait_itr->trait_factors) {
             ATOMIC_ATTRIBUTE trait;
             bool found = false;
-            if (deserialized_template_data.find(trait_factor->trait_name) != deserialized_template_data.end()) {
-                trait = deserialized_template_data[trait_factor->trait_name];
+            if (deserialized_template_data.find(trait_factor.trait_name) != deserialized_template_data.end()) {
+                trait = deserialized_template_data[trait_factor.trait_name];
                 found = true;
             }
-            if (deserialized_immutable_data.find(trait_factor->trait_name) != deserialized_immutable_data.end()) {
-                trait = deserialized_immutable_data[trait_factor->trait_name];
+            if (deserialized_immutable_data.find(trait_factor.trait_name) != deserialized_immutable_data.end()) {
+                trait = deserialized_immutable_data[trait_factor.trait_name];
                 found = true;
             }
-            if (deserialized_mutable_data.find(trait_factor->trait_name) == deserialized_mutable_data.end()) {
-                trait = deserialized_mutable_data.find(trait_factor->trait_name);
+            if (deserialized_mutable_data.find(trait_factor.trait_name) == deserialized_mutable_data.end()) {
+                trait = deserialized_mutable_data[trait_factor.trait_name];
                 found = true;
             }
 
             if (found) {
                 string trait_value = std::get<string>(trait);
-                if (trait_factor->values.size() > 0) {
-                    for (VALUEFACTOR value : trait_factor->values) {
+                if (trait_factor.values.size() > 0) {
+                    for (VALUEFACTOR value : trait_factor.values) {
                         if (value.value == trait_value) {
                             factor *= value.factor;
                         }
@@ -609,7 +609,7 @@ ACTION rwax::redeem(
         modified_item.currently_tokenized = modified_item.currently_tokenized - 1;
     });
 
-    asset required_amount = calculate_issued_tokens(apool_itr->asset_id, apool_itr->template_id);
+    asset required_amount = calculate_issued_tokens(apool_itr->asset_id, asset_itr->template_id);
 
     if (required_amount.amount < quantity.amount) {
         check(false, ("Invalid amount. Must transfer exactly " + required_amount.to_string()).c_str());
@@ -617,7 +617,7 @@ ACTION rwax::redeem(
 
     asset_pools.erase(apool_itr);
 
-    if (stake_pool == get_self()) {
+    if (asset_pool == get_self()) {
         vector<uint64_t> asset_ids = {};
         asset_ids.push_back(asset_itr->asset_id);
 
@@ -635,7 +635,7 @@ ACTION rwax::redeem(
     } else {
         action(
             permission_level{get_self(), name("active")},
-            stake_pool,
+            asset_pool,
             name("redeem"),
             make_tuple(
                 redeemer,

@@ -128,7 +128,7 @@ public:
 private:
     asset calculate_issued_tokens(
         uint64_t asset_id, 
-        int32_t template_id,
+        int32_t template_id
     );
 
     void withdraw_balances(
@@ -220,6 +220,13 @@ private:
         uint64_t primary_key() const { return (uint64_t) template_id; }
     };
 
+    struct schemas_s {
+        name            schema_name;
+        vector <FORMAT> format;
+
+        uint64_t primary_key() const { return schema_name.value; }
+    };
+
     vector<asset> get_prices(uint64_t drop_id);
 
     TABLE tokens_s {
@@ -301,6 +308,7 @@ private:
     typedef eosio::multi_index<name("rewards"), rewards_s> rewards_t;
     typedef eosio::multi_index<name("stakepools"), stakepools_s> stakepools_t;
     typedef eosio::multi_index<name("traitfactors"), traitfactors_s> traitfactors_t;
+    typedef multi_index <name("schemas"), schemas_s> schemas_t;
     
     collections_t collections = collections_t(name("atomicassets"), name("atomicassets").value);
     tokens_t tokens = tokens_t(get_self(), get_self().value);
@@ -328,5 +336,9 @@ private:
     
     stakepools_t get_stakepools(name pool) {
         return stakepools_t(get_self(), pool.value);
+    }
+
+    schemas_t get_schemas(name collection_name) {
+        return schemas_t(name("atomicassets"), collection_name.value);
     }
 };
