@@ -1,0 +1,280 @@
+{
+    "____comment": "This file was generated with eosio-abigen. DO NOT EDIT ",
+    "version": "eosio::abi/1.2",
+    "types": [],
+    "structs": [
+        {
+            "name": "TEMPLATE",
+            "base": "",
+            "fields": [
+                {
+                    "name": "template_id",
+                    "type": "int32"
+                },
+                {
+                    "name": "max_assets_to_tokonize",
+                    "type": "uint32"
+                }
+            ]
+        },
+        {
+            "name": "TRAITFACTOR",
+            "base": "",
+            "fields": [
+                {
+                    "name": "trait_name",
+                    "type": "string"
+                },
+                {
+                    "name": "min_value",
+                    "type": "float32"
+                },
+                {
+                    "name": "max_value",
+                    "type": "float32"
+                },
+                {
+                    "name": "min_factor",
+                    "type": "float32"
+                },
+                {
+                    "name": "max_factor",
+                    "type": "float32"
+                },
+                {
+                    "name": "values",
+                    "type": "VALUEFACTOR[]"
+                }
+            ]
+        },
+        {
+            "name": "VALUEFACTOR",
+            "base": "",
+            "fields": [
+                {
+                    "name": "value",
+                    "type": "string"
+                },
+                {
+                    "name": "factor",
+                    "type": "float32"
+                }
+            ]
+        },
+        {
+            "name": "addstakepool",
+            "base": "",
+            "fields": [
+                {
+                    "name": "pool",
+                    "type": "name"
+                },
+                {
+                    "name": "reward_token",
+                    "type": "symbol"
+                },
+                {
+                    "name": "stake_token",
+                    "type": "symbol"
+                }
+            ]
+        },
+        {
+            "name": "claim",
+            "base": "",
+            "fields": [
+                {
+                    "name": "staker",
+                    "type": "name"
+                },
+                {
+                    "name": "token",
+                    "type": "asset"
+                }
+            ]
+        },
+        {
+            "name": "erasetoken",
+            "base": "",
+            "fields": [
+                {
+                    "name": "authorized_account",
+                    "type": "name"
+                },
+                {
+                    "name": "token",
+                    "type": "asset"
+                }
+            ]
+        },
+        {
+            "name": "init",
+            "base": "",
+            "fields": []
+        },
+        {
+            "name": "redeem",
+            "base": "",
+            "fields": [
+                {
+                    "name": "redeemer",
+                    "type": "name"
+                },
+                {
+                    "name": "quantity",
+                    "type": "asset"
+                }
+            ]
+        },
+        {
+            "name": "stake",
+            "base": "",
+            "fields": [
+                {
+                    "name": "staker",
+                    "type": "name"
+                },
+                {
+                    "name": "quantity",
+                    "type": "asset"
+                }
+            ]
+        },
+        {
+            "name": "tokenize",
+            "base": "",
+            "fields": [
+                {
+                    "name": "authorized_account",
+                    "type": "name"
+                },
+                {
+                    "name": "collection_name",
+                    "type": "name"
+                },
+                {
+                    "name": "maximum_supply",
+                    "type": "asset"
+                },
+                {
+                    "name": "templates",
+                    "type": "TEMPLATE[]"
+                },
+                {
+                    "name": "trait_factors",
+                    "type": "TRAITFACTOR[]"
+                },
+                {
+                    "name": "token_name",
+                    "type": "string"
+                },
+                {
+                    "name": "token_logo",
+                    "type": "string"
+                },
+                {
+                    "name": "token_logo_lg",
+                    "type": "string"
+                }
+            ]
+        },
+        {
+            "name": "tokenizenfts",
+            "base": "",
+            "fields": [
+                {
+                    "name": "user",
+                    "type": "name"
+                },
+                {
+                    "name": "asset_ids",
+                    "type": "uint64[]"
+                }
+            ]
+        },
+        {
+            "name": "unstake",
+            "base": "",
+            "fields": [
+                {
+                    "name": "staker",
+                    "type": "name"
+                },
+                {
+                    "name": "quantity",
+                    "type": "asset"
+                }
+            ]
+        },
+        {
+            "name": "withdraw",
+            "base": "",
+            "fields": [
+                {
+                    "name": "tokens",
+                    "type": "asset[]"
+                },
+                {
+                    "name": "account",
+                    "type": "name"
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "name": "addstakepool",
+            "type": "addstakepool",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "claim",
+            "type": "claim",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "erasetoken",
+            "type": "erasetoken",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "init",
+            "type": "init",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "redeem",
+            "type": "redeem",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "stake",
+            "type": "stake",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "tokenize",
+            "type": "tokenize",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "tokenizenfts",
+            "type": "tokenizenfts",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "unstake",
+            "type": "unstake",
+            "ricardian_contract": ""
+        },
+        {
+            "name": "withdraw",
+            "type": "withdraw",
+            "ricardian_contract": ""
+        }
+    ],
+    "tables": [],
+    "ricardian_clauses": [],
+    "variants": [],
+    "action_results": []
+}
