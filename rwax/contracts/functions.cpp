@@ -1,5 +1,9 @@
 #pragma once
 
+inline eosio::permission_level rwax::active_perm() {
+  return eosio::permission_level{ _self, "active"_n };
+}
+
 void rwax::add_balances(name account, vector<asset> tokens) {
     auto balance_itr = balances.find(account.value);
 
@@ -266,18 +270,14 @@ void rwax::tokenize_asset(
         ).send();
     }
 
-    action(
-        permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
-        name("transfer"),
-        make_tuple(
-            get_self(),
-            receiver,
-            issued_tokens,
-            string("Tokenized Asset " + to_string(asset_id))
-        )
-    ).send();
+    transfer_tokens(receiver, issued_tokens, RWAX_TOKEN_CONTRACT, string("Tokenized Asset " + to_string(asset_id)));
 }
+
+
+void rwax::transfer_tokens(const name& user, const asset& amount_to_send, const name& contract, const std::string& memo){
+  action(active_perm(), contract, "transfer"_n, std::tuple{ get_self(), user, amount_to_send, memo}).send();
+}
+
 
 void rwax::withdraw_balances(name account, vector<asset> tokens) {
     auto balance_itr = balances.require_find(account.value, "No balance object found");

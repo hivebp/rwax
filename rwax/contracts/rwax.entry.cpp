@@ -32,33 +32,18 @@ ACTION rwax::claim(
 ) {
     require_auth(staker);
 
-    stakes_t token_stakes = get_stakes(token.symbol.code().raw());
-
-    auto stake_itr = token_stakes.require_find(staker.value, "Stake not found");
+    stakes_t    token_stakes    = get_stakes(token.symbol.code().raw());
+    auto        stake_itr       = token_stakes.require_find(staker.value, "Stake not found");
 
     for (asset token : stake_itr->rewarded_tokens) {
         name contract = get_token_contract(token.symbol);
-
-        action(
-            permission_level{get_self(), name("active")},
-            contract,
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                staker,
-                token,
-                string("Claiming staking rewards")
-            )
-        ).send();
+        transfer_tokens(staker, token, contract, "Claiming staking rewards");
     }
 
     token_stakes.erase(stake_itr);
 
-    vector<asset> reward_placeholder = {};
-    asset reward = asset(0, CORE_SYMBOL);
-
     token_stakes.modify(stake_itr, same_payer, [&](auto& _item) {
-        _item.rewarded_tokens = reward_placeholder;
+        _item.rewarded_tokens = {asset(0, CORE_SYMBOL)};
     });
 }
 
@@ -91,17 +76,7 @@ ACTION rwax::erasetoken(
         apool_itr = asset_pools.begin();
     }
 
-    action(
-        permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
-        name("transfer"),
-        make_tuple(
-            get_self(),
-            authorized_account,
-            token_itr->maximum_supply - token_itr->issued_supply,
-            string("rWAX: Erasing Token")
-        )
-    ).send();
+    transfer_tokens(authorized_account, token_itr->maximum_supply - token_itr->issued_supply, RWAX_TOKEN_CONTRACT, "rWAX: Erasing Token");
 
     if (asset_ids.size() > 0) {
         action(
@@ -353,9 +328,8 @@ ACTION rwax::tokenizenfts(
 ) {
     require_auth(user);
 
-    auto transfer_itr = transfers.require_find(user.value, "No assets found");
-
-    vector<uint64_t> new_assets = transfer_itr->assets;
+    auto                transfer_itr    = transfers.require_find(user.value, "No assets found");
+    vector<uint64_t>    new_assets      = transfer_itr->assets;
 
     for (uint64_t asset_id : asset_ids) {
         if(std::find(transfer_itr->assets.begin(), transfer_itr->assets.end(), asset_id) == transfer_itr->assets.end()) { 
@@ -380,11 +354,6 @@ ACTION rwax::tokenizenfts(
 }
 
 
-
-
-
-
-
 ACTION rwax::unstake(
     name staker,
     asset quantity
@@ -397,47 +366,27 @@ ACTION rwax::unstake(
 
     check(stake_itr->amount.amount >= quantity.amount, "Overdrawn Balance");
 
-    action(
-        permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
-        name("transfer"),
-        make_tuple(
-            get_self(),
-            staker,
-            quantity,
-            string("Returning staked amount")
-        )
-    ).send();
+    transfer_tokens(staker, quantity, RWAX_TOKEN_CONTRACT, "Returning staked amount");
 
     if (quantity.amount == stake_itr->amount.amount) {
         for (asset token : stake_itr->rewarded_tokens) {
             name contract = get_token_contract(token.symbol);
 
-            action(
-                permission_level{get_self(), name("active")},
-                contract,
-                name("transfer"),
-                make_tuple(
-                    get_self(),
-                    staker,
-                    token,
-                    string("Returning staking rewards")
-                )
-            ).send();
+            transfer_tokens(staker, token, contract, "Returning staking rewards");
         }
 
         token_stakes.erase(stake_itr);
     } else {
         token_stakes.modify(stake_itr, staker, [&](auto& modified_item) {
-            modified_item.amount = modified_item.amount - quantity;
+            modified_item.amount -= quantity;
         });
     }
 }
 
 
 ACTION rwax::withdraw(
-    vector<asset> tokens,
-    name account
+    vector<asset>   tokens,
+    name            account
 ) {
     require_auth(account);
 
@@ -447,17 +396,6 @@ ACTION rwax::withdraw(
 
     for (asset token : tokens) {
         name contract = get_token_contract(token.symbol);
-
-        action(
-            permission_level{get_self(), name("active")},
-            contract,
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                account,
-                token,
-                string("NFTHive craft Balance Withdrawal")
-            )
-        ).send();
+        transfer_tokens(account, token, contract, "NFTHive craft Balance Withdrawal");
     }
 }
