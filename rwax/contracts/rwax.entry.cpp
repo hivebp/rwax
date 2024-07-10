@@ -128,8 +128,8 @@ ACTION rwax::init() {
 
 
 ACTION rwax::redeem(
-    name redeemer,
-    asset quantity
+    name    redeemer,
+    asset   quantity
 ) {
     require_auth(redeemer);
 
@@ -137,22 +137,22 @@ ACTION rwax::redeem(
 
     check(quantity.amount > 0, "Must redeem positive amount");
 
-    vector<asset> assets = {};
-
-    assets.push_back(quantity);
+    vector<asset> assets = {quantity};
 
     withdraw_balances(redeemer, assets);
 
-    auto token_itr = tokens.require_find(quantity.symbol.code().raw(), "Token not found");
-    asset issued_supply = token_itr->issued_supply;
-    uint32_t total_assets_tokenized = 0;
+    auto        token_itr               = tokens.require_find(quantity.symbol.code().raw(), "Token not found");
+    asset       issued_supply           = token_itr->issued_supply;
+    uint32_t    total_assets_tokenized  = 0;
+
     for (TEMPLATE templ : token_itr->templates) {
         auto templ_itr = templpools.find(templ.template_id);
         total_assets_tokenized += templ_itr->currently_tokenized;
     }
 
-    assetpools_t asset_pools = get_assetpool(quantity.symbol.code().raw());
-    auto apool_itr = asset_pools.begin();
+    assetpools_t    asset_pools = get_assetpool(quantity.symbol.code().raw());
+    auto            apool_itr   = asset_pools.begin();
+
     check(apool_itr != asset_pools.end(), "No assets available");
 
     name        asset_pool          = find_asset_pool(issued_supply);
@@ -225,17 +225,14 @@ ACTION rwax::stake(
     auto stake_itr = token_stakes.find(staker.value);
 
     if (stake_itr == token_stakes.end()) {
-        vector<asset> reward_placeholder = {};
-        asset reward = asset(0, CORE_SYMBOL);
-        reward_placeholder.push_back(reward);
         token_stakes.emplace(get_self(), [&](auto& _stake) {
-            _stake.staker = staker;
-            _stake.amount = quantity;
-            _stake.rewarded_tokens = reward_placeholder;
+            _stake.staker           = staker;
+            _stake.amount           = quantity;
+            _stake.rewarded_tokens  = {asset(0, CORE_SYMBOL)};
         });
     } else {
         token_stakes.modify(stake_itr, staker, [&](auto& modified_item) {
-            modified_item.amount = modified_item.amount + quantity;
+            modified_item.amount += quantity;
         });
     }
 }
