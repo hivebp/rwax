@@ -9,6 +9,7 @@ const [a, b, c, d, e] = blockchain.createAccounts('mike', 'hive', 'rwaxtester', 
 const contracts = {
     atomicassets: blockchain.createContract('atomicassets', '../atomicassets/build/atomicassets'),
     rwax: blockchain.createContract('rwax', 'build/rwax'),
+    token: blockchain.createContract('token.rwax', '../eosio.token/build/token'),
     wax: blockchain.createContract('eosio.token', '../eosio.token/build/token')
 }
 

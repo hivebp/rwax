@@ -203,9 +203,8 @@ void rwax::tokenize_asset(
     uint64_t asset_id,
     name receiver
 ) {
-    assets_t own_assets = get_assets(get_self());
-
-    auto asset_itr = own_assets.find(asset_id);
+    assets_t    own_assets  = get_assets(get_self());
+    auto        asset_itr   = own_assets.find(asset_id);
 
     if (asset_itr == own_assets.end()) {
         check(false, ("Asset ID not found: " + to_string(asset_id)).c_str());
@@ -215,8 +214,8 @@ void rwax::tokenize_asset(
         check(false, ("Invalid Template ID for Asset: " + to_string(asset_id)).c_str());
     }
 
-    templates_t col_templates = get_templates(asset_itr->collection_name);
-    auto template_itr = col_templates.find(asset_itr->template_id);
+    templates_t col_templates   = get_templates(asset_itr->collection_name);
+    auto        template_itr    = col_templates.find(asset_itr->template_id);
 
     if (template_itr == col_templates.end()) {
         check(false, ("Template " + to_string(asset_itr->template_id) + " not found").c_str());
@@ -236,14 +235,11 @@ void rwax::tokenize_asset(
         modified_item.currently_tokenized = modified_item.currently_tokenized + 1;
     });
 
-    auto token_itr = tokens.find(template_pool_itr->token_share.symbol.code().raw());
-
-    check(token_itr != tokens.end(), "Token not found.");
-
-    asset issued_tokens = calculate_issued_tokens(asset_id, template_itr->template_id);
+    auto    token_itr       = tokens.require_find(template_pool_itr->token_share.symbol.code().raw(), "Token not found.");
+    asset   issued_tokens   = calculate_issued_tokens(asset_id, template_itr->template_id);
 
     tokens.modify(token_itr, same_payer, [&](auto& modified_item) {
-        modified_item.issued_supply = modified_item.issued_supply + issued_tokens;
+        modified_item.issued_supply += issued_tokens;
     });
 
     assetpools_t asset_pools = get_assetpool(template_pool_itr->token_share.symbol.code().raw());
@@ -255,8 +251,7 @@ void rwax::tokenize_asset(
     name pool = find_asset_pool(issued_tokens);
 
     if (pool != get_self()) {
-        vector<uint64_t> asset_ids = {};
-        asset_ids.push_back(asset_id);
+        vector<uint64_t> asset_ids = {asset_id};
 
         action(
             permission_level{get_self(), name("active")},
@@ -290,29 +285,30 @@ void rwax::withdraw_balances(name account, vector<asset> tokens) {
     vector<asset> new_balances;
 
     // Check for existing balances that won't get modified first. Add them unchanged
-    for (int i = 0; i < balance_itr->assets.size(); i++) {
+    for (asset a : balance_itr->assets) {
         bool found = false;
         for (asset token : tokens) {
-            if (token.symbol == balance_itr->assets[i].symbol) {
+            if (token.symbol == a.symbol) {
                 found = true;
             }
         }
         if (!found) {
-            new_balances.push_back(balance_itr->assets[i]);
+            new_balances.push_back(a);
         }
     }
 
     // Process the balances that get modified.
     for (asset token : tokens) {
         bool found = false;
-        for (int i = 0; i < balance_itr->assets.size() && !found; i++) {
-            if (balance_itr->assets[i].symbol == token.symbol) {
-                asset new_amount = balance_itr->assets[i] - token;
+        for (asset a : balance_itr->assets) {
+            if (a.symbol == token.symbol) {
+                asset new_amount = a - token;
                 check(new_amount.amount >= 0 && token.amount >= 0, "Overdrawn Balance");
                 if (new_amount.amount > 0) {
                     new_balances.push_back(new_amount);
                 }
                 found = true;
+                break;
             }
         }
         check(found, "Balance not found");

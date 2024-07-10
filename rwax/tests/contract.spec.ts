@@ -39,5 +39,13 @@ describe('tokenize action', () => {
         const action = contracts.rwax.actions.tokenize(['alice', 'testcollec12', `100.0000 SHIT`, [], [], 'Shit Token', 'QMabcSmall', 'QMabcLarge']).send('alice@active');
         await expectToThrow( action, ERR_ACCOUNT_NOT_AUTHORIZED );
     });        
-                  
+   
+    it('error: supply must be positive', async () => {
+        const action = contracts.rwax.actions.tokenize(['mike', 'testcollec12', `0.0000 SHIT`, [], [], 'Shit Token', 'QMabcSmall', 'QMabcLarge']).send('mike@active');
+        await expectToThrow( action, `eosio_assert: Must provide positive supply` );
+    });    
+
+    it('no templates or factors?', async () => {
+        await contracts.rwax.actions.tokenize(['mike', 'testcollec12', `1.0000 SHIT`, [], [], 'Shit Token', 'QMabcSmall', 'QMabcLarge']).send('mike@active');
+    });                    
 });
