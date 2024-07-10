@@ -155,16 +155,13 @@ ACTION rwax::redeem(
     auto apool_itr = asset_pools.begin();
     check(apool_itr != asset_pools.end(), "No assets available");
 
-    name asset_pool = find_asset_pool(issued_supply);
-
-    assets_t asset_pool_assets = get_assets(asset_pool);
-
-    auto asset_itr = asset_pool_assets.find(apool_itr->asset_id);
-
-    auto template_pool_itr = templpools.find(asset_itr->template_id);
+    name        asset_pool          = find_asset_pool(issued_supply);
+    assets_t    asset_pool_assets   = get_assets(asset_pool);
+    auto        asset_itr           = asset_pool_assets.find(apool_itr->asset_id);
+    auto        template_pool_itr   = templpools.find(asset_itr->template_id);
 
     templpools.modify(template_pool_itr, same_payer, [&](auto& modified_item) {
-        modified_item.currently_tokenized = modified_item.currently_tokenized - 1;
+        modified_item.currently_tokenized --;
     });
 
     asset required_amount = calculate_issued_tokens(apool_itr->asset_id, asset_itr->template_id);
@@ -176,8 +173,7 @@ ACTION rwax::redeem(
     asset_pools.erase(apool_itr);
 
     if (asset_pool == get_self()) {
-        vector<uint64_t> asset_ids = {};
-        asset_ids.push_back(asset_itr->asset_id);
+        vector<uint64_t> asset_ids = {asset_itr->asset_id};
 
         action(
             permission_level{get_self(), name("active")},
@@ -203,7 +199,7 @@ ACTION rwax::redeem(
     }
 
     tokens.modify(token_itr, same_payer, [&](auto& modified_item) {
-        modified_item.issued_supply = modified_item.issued_supply - required_amount;
+        modified_item.issued_supply -= required_amount;
     });
 }
 
@@ -268,8 +264,8 @@ ACTION rwax::tokenize(
     }
     
     for (TEMPLATE templ : templates) {
-        int32_t template_id = templ.template_id;
-        auto template_itr = collection_templates.find(template_id);
+        int32_t template_id     = templ.template_id;
+        auto    template_itr    = collection_templates.find(template_id);
 
         if (template_itr == collection_templates.end()) {
             check(false, ("No template with this ID exists: " + to_string(template_id)).c_str());
@@ -289,10 +285,10 @@ ACTION rwax::tokenize(
         asset template_supply = asset(maximum_supply.amount * (templ.max_assets_to_tokonize / total_assets_to_tokenize), maximum_supply.symbol);
 
         templpools.emplace(authorized_account, [&](auto& new_pool) {
-            new_pool.template_id = template_id;
+            new_pool.template_id            = template_id;
             new_pool.max_assets_to_tokonize = templ.max_assets_to_tokonize;
-            new_pool.currently_tokenized = 0;
-            new_pool.token_share = template_supply;
+            new_pool.currently_tokenized    = 0;
+            new_pool.token_share            = template_supply;
         });
     }
 
@@ -315,17 +311,17 @@ ACTION rwax::tokenize(
 
     if (trait_factors.size() > 0) {
         traitfactors.emplace(authorized_account, [&](auto& new_factor) {
-            new_factor.token = maximum_supply.symbol;
-            new_factor.trait_factors = trait_factors;
+            new_factor.token            = maximum_supply.symbol;
+            new_factor.trait_factors    = trait_factors;
         });
     }
 
     tokens.emplace(authorized_account, [&](auto& new_token) {
-        new_token.maximum_supply = maximum_supply;
-        new_token.issued_supply = issued_supply;
-        new_token.collection_name = collection_name;
-        new_token.authorized_account = authorized_account;
-        new_token.templates = templates;
+        new_token.maximum_supply        = maximum_supply;
+        new_token.issued_supply         = issued_supply;
+        new_token.collection_name       = collection_name;
+        new_token.authorized_account    = authorized_account;
+        new_token.templates             = templates;
     });
 
     action(
