@@ -8,10 +8,8 @@ function almost_equal(actual, expected, tolerance = 0.000003) {
 }
 
 // Error Messages
-const ERR_LISTING_DOESNT_EXIST = "eosio_assert: listing ID not found";
-
-// Enums
-const STATUSES = Object.freeze({ AWAITING_DEPOSIT: 0, DEPOSIT_MADE: 1, BORROWED: 2, LIQUIDATED: 3 });
+const ERR_ACCOUNT_NOT_AUTHORIZED = "eosio_assert: Account is not authorized";
+const ERR_COLLECTION_DOESNT_EXIST = "eosio_assert: No collection with this name exists";
 
 const wax = (amount) => {
     //console.log(`${parseFloat(amount).toFixed(8)} WAX`);
@@ -20,7 +18,7 @@ const wax = (amount) => {
 
 module.exports = {
     almost_equal,
-    ERR_LISTING_DOESNT_EXIST,
-    STATUSES,
+    ERR_ACCOUNT_NOT_AUTHORIZED,
+    ERR_COLLECTION_DOESNT_EXIST,
     wax
 }

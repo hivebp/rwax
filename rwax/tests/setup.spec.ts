@@ -4,7 +4,7 @@ const { assert } = require("chai");
 const { wax } = require("./helpers.ts")
 const blockchain = new Blockchain();
 
-const [a, b, c, d, e] = blockchain.createAccounts('mike', 'waxdao', 'fees.waxdao', 'eosio', 'alice')
+const [a, b, c, d, e] = blockchain.createAccounts('mike', 'hive', 'rwaxtester', 'eosio', 'alice')
 
 const contracts = {
     atomicassets: blockchain.createContract('atomicassets', '../atomicassets/build/atomicassets'),
@@ -55,6 +55,18 @@ const getAssets = async (user, log = false) => {
     return assets 
 }
 
+const getCollections = async (log = false) => {
+
+    const collections = await contracts.atomicassets.tables
+        .collections(scopes.atomicassets)
+        .getTableRows()
+    if(log){
+        console.log('collections:')
+        console.log(collections)  
+    }
+    return collections 
+}
+
 const collection_data = [
     { first: "name", second: ["string", "Test Col"] },
     { first: "description", second: ["string", "something blah"] },
@@ -85,7 +97,8 @@ const init = async () => {
     await contracts.wax.actions.create(['eosio', initial_state.wax_supply]).send();
     await contracts.wax.actions.issue(['eosio', initial_state.wax_supply, 'issuing wax']).send('eosio@active');
     await contracts.wax.actions.transfer(['eosio', 'mike', wax(100000), 'sending wax to mike']).send('eosio@active');
-    await contracts.wax.actions.transfer(['eosio', 'waxdao', wax(100000), 'sending wax to waxdao']).send('eosio@active');
+    await contracts.wax.actions.transfer(['eosio', 'hive', wax(100000), 'sending wax to hive']).send('eosio@active');
+    await contracts.wax.actions.transfer(['eosio', 'rwaxtester', wax(100000), 'sending wax to rwaxtester']).send('eosio@active');
     await contracts.wax.actions.transfer(['eosio', 'alice', wax(100000), 'sending wax to alice']).send('eosio@active');
     await contracts.atomicassets.actions.init([]).send('atomicassets@active');
     await contracts.rwax.actions.init([]).send('rwax@active');
@@ -101,6 +114,7 @@ module.exports = {
     blockchain,
     contracts,
     getAssets,
+    getCollections,
     incrementTime,
     init,
     initial_state,
