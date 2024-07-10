@@ -1,4 +1,5 @@
+node_modules/
+deployments/
+.env
 *.md
 !README.md
-/node_modules
-.env
