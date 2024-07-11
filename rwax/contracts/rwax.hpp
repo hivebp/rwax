@@ -70,7 +70,8 @@ CONTRACT rwax : public contract {
         templates_t                     get_templates(name collection_name);
         name                            get_token_contract(symbol token_symbol);        
         bool                            is_token_supported(name token_contract, symbol token_symbol);    
-        void                            tokenize_asset(uint64_t asset_id, name receiver);  
+        void                            tokenize_asset(uint64_t asset_id, name receiver);
+        void                            transfer_nfts(const name& user, const vector<uint64_t>& asset_ids, const std::string& memo);
         void                            transfer_tokens(const name& user, const asset& amount_to_send, const name& contract, const std::string& memo);          
         void                            withdraw_balances(name account, vector<asset> tokens);        
 };

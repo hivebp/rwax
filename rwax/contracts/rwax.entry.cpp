@@ -79,17 +79,7 @@ ACTION rwax::erasetoken(
     transfer_tokens(authorized_account, token_itr->maximum_supply - token_itr->issued_supply, RWAX_TOKEN_CONTRACT, "rWAX: Erasing Token");
 
     if (asset_ids.size() > 0) {
-        action(
-            permission_level{get_self(), name("active")},
-            name("atomicassets"),
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                authorized_account,
-                asset_ids,
-                string("rWAX: Erasing Token")
-            )
-        ).send();
+        transfer_nfts(authorized_account, asset_ids, string("rWAX: Erasing Token"));
     }
 
     tokens.erase(token_itr);
@@ -148,19 +138,7 @@ ACTION rwax::redeem(
     asset_pools.erase(apool_itr);
 
     if (asset_pool == get_self()) {
-        vector<uint64_t> asset_ids = {asset_itr->asset_id};
-
-        action(
-            permission_level{get_self(), name("active")},
-            name("atomicassets"),
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                redeemer,
-                asset_ids,
-                string("Redeeming from RWAX")
-            )
-        ).send();
+        transfer_nfts(redeemer, {asset_itr->asset_id}, string("Redeeming from RWAX"));
     } else {
         action(
             permission_level{get_self(), name("active")},
@@ -360,9 +338,8 @@ ACTION rwax::unstake(
 ) {
     require_auth(staker);
 
-    stakes_t token_stakes = get_stakes(quantity.symbol.code().raw());
-
-    auto stake_itr = token_stakes.require_find(staker.value, "Stake not found");
+    stakes_t    token_stakes    = get_stakes(quantity.symbol.code().raw());
+    auto        stake_itr       = token_stakes.require_find(staker.value, "Stake not found");
 
     check(stake_itr->amount.amount >= quantity.amount, "Overdrawn Balance");
 

@@ -255,24 +255,20 @@ void rwax::tokenize_asset(
     name pool = find_asset_pool(issued_tokens);
 
     if (pool != get_self()) {
-        vector<uint64_t> asset_ids = {asset_id};
-
-        action(
-            permission_level{get_self(), name("active")},
-            name("atomicassets"),
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                pool,
-                asset_ids,
-                string("Storing " + to_string(asset_id))
-            )
-        ).send();
+        transfer_nfts(pool, {asset_id}, string("Storing " + to_string(asset_id)));
     }
 
     transfer_tokens(receiver, issued_tokens, RWAX_TOKEN_CONTRACT, string("Tokenized Asset " + to_string(asset_id)));
 }
 
+void rwax::transfer_nfts(const name& user, const vector<uint64_t>& asset_ids, const std::string& memo){
+  action(
+    active_perm(),
+    ATOMICASSETS_CONTRACT,
+    "transfer"_n,
+    std::tuple{ _self, user, asset_ids, memo }
+  ).send();
+}
 
 void rwax::transfer_tokens(const name& user, const asset& amount_to_send, const name& contract, const std::string& memo){
   action(active_perm(), contract, "transfer"_n, std::tuple{ get_self(), user, amount_to_send, memo}).send();
