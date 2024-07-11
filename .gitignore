@@ -5,3 +5,4 @@ deployments/
 !README.md
 *.fuckyea_id
 *.config.js
+*.DS_STORE
