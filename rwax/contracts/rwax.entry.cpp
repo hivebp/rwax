@@ -102,9 +102,7 @@ ACTION rwax::redeem(
 
     check(quantity.amount > 0, "Must redeem positive amount");
 
-    vector<asset> assets = {quantity};
-
-    withdraw_balances(redeemer, assets);
+    withdraw_balances(redeemer, {quantity});
 
     auto        token_itr               = tokens.require_find(quantity.symbol.code().raw(), "Token not found");
     asset       issued_supply           = token_itr->issued_supply;
@@ -141,7 +139,7 @@ ACTION rwax::redeem(
         transfer_nfts(redeemer, {asset_itr->asset_id}, string("Redeeming from RWAX"));
     } else {
         action(
-            permission_level{get_self(), name("active")},
+            active_perm(),
             asset_pool,
             name("redeem"),
             make_tuple(
@@ -158,8 +156,8 @@ ACTION rwax::redeem(
 
 
 ACTION rwax::stake(
-    name staker,
-    asset quantity
+    name    staker,
+    asset   quantity
 ) {
     require_auth(staker);
 
@@ -167,11 +165,7 @@ ACTION rwax::stake(
 
     check(quantity.amount > 0, "Must redeem positive amount");
 
-    vector<asset> assets = {};
-
-    assets.push_back(quantity);
-
-    withdraw_balances(staker, assets);
+    withdraw_balances(staker, {quantity});
 
     stakes_t token_stakes = get_stakes(quantity.symbol.code().raw());
 
@@ -246,9 +240,6 @@ ACTION rwax::tokenize(
 
     check(token_itr == tokens.end(), "Symbol already exists");
 
-    asset issued_supply = maximum_supply;
-    issued_supply.amount = 0;
-
     for (TRAITFACTOR factor : trait_factors) {
         check(factor.min_factor >= 1, "Minimum Factor must be >= 1");
         check(factor.max_factor >= 1, "Maximum Factor must be >= 1");
@@ -268,14 +259,14 @@ ACTION rwax::tokenize(
 
     tokens.emplace(authorized_account, [&](auto& new_token) {
         new_token.maximum_supply        = maximum_supply;
-        new_token.issued_supply         = issued_supply;
+        new_token.issued_supply         = asset(0, maximum_supply.symbol);
         new_token.collection_name       = collection_name;
         new_token.authorized_account    = authorized_account;
         new_token.templates             = templates;
     });
 
     action(
-        permission_level{get_self(), name("active")},
+        active_perm(),
         RWAX_TOKEN_CONTRACT,
         name("create"),
         make_tuple(
@@ -288,7 +279,7 @@ ACTION rwax::tokenize(
     ).send();
 
     action(
-        permission_level{get_self(), name("active")},
+        active_perm(),
         RWAX_TOKEN_CONTRACT,
         name("issue"),
         make_tuple(
@@ -333,8 +324,8 @@ ACTION rwax::tokenizenfts(
 
 
 ACTION rwax::unstake(
-    name staker,
-    asset quantity
+    name    staker,
+    asset   quantity
 ) {
     require_auth(staker);
 
@@ -347,9 +338,7 @@ ACTION rwax::unstake(
 
     if (quantity.amount == stake_itr->amount.amount) {
         for (asset token : stake_itr->rewarded_tokens) {
-            name contract = get_token_contract(token.symbol);
-
-            transfer_tokens(staker, token, contract, "Returning staking rewards");
+            transfer_tokens(staker, token, get_token_contract(token.symbol), "Returning staking rewards");
         }
 
         token_stakes.erase(stake_itr);
@@ -372,7 +361,6 @@ ACTION rwax::withdraw(
     withdraw_balances(account, tokens);
 
     for (asset token : tokens) {
-        name contract = get_token_contract(token.symbol);
-        transfer_tokens(account, token, contract, "NFTHive craft Balance Withdrawal");
+        transfer_tokens(account, token, get_token_contract(token.symbol), "NFTHive craft Balance Withdrawal");
     }
 }
