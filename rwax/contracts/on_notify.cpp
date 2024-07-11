@@ -78,10 +78,7 @@ void rwax::receive_nft_transfer(
 
     check(memo.find("deposit") == 0, "Invalid Memo.");
 
-    vector<uint64_t> assets_to_add = {};
-    for (uint64_t asset_id : asset_ids) {
-        assets_to_add.push_back(asset_id);
-    }
+    vector<uint64_t> assets_to_add = asset_ids;
 
     auto transfer_itr = transfers.find(from.value);
     if (transfer_itr == transfers.end()) {
