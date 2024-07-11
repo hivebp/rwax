@@ -3,3 +3,5 @@ deployments/
 .env
 *.md
 !README.md
+*.fuckyea_id
+*.config.js

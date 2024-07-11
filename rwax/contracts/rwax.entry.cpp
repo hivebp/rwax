@@ -5,9 +5,9 @@
 //contractName: rwax
 
 ACTION rwax::addstakepool(
-    name pool,
-    symbol reward_token,
-    symbol stake_token
+    name    pool,
+    symbol  reward_token,
+    symbol  stake_token
 ) {
     require_auth(get_self());
 
@@ -16,8 +16,8 @@ ACTION rwax::addstakepool(
     check( stakepools.find(pool.value) == stakepools.end(), "Pool already exists" );
 
     stakepools.emplace(get_self(), [&](auto& _pool) {
-        _pool.reward_token = reward_token;
-        _pool.stake_token = stake_token;
+        _pool.reward_token  = reward_token;
+        _pool.stake_token   = stake_token;
     });
 
     config_s current_config = config.get();
@@ -65,11 +65,10 @@ ACTION rwax::erasetoken(
         }
     }
 
-    assetpools_t asset_pools = get_assetpool(token.symbol.code().raw());
+    assetpools_t        asset_pools = get_assetpool(token.symbol.code().raw());
+    auto                apool_itr   = asset_pools.begin();
+    vector<uint64_t>    asset_ids   = {};
 
-    auto apool_itr = asset_pools.begin();
-
-    vector<uint64_t> asset_ids = {};
     while (apool_itr != asset_pools.end()) {
         asset_ids.push_back(apool_itr->asset_id);
         asset_pools.erase(apool_itr);
@@ -167,9 +166,8 @@ ACTION rwax::stake(
 
     withdraw_balances(staker, {quantity});
 
-    stakes_t token_stakes = get_stakes(quantity.symbol.code().raw());
-
-    auto stake_itr = token_stakes.find(staker.value);
+    stakes_t    token_stakes    = get_stakes(quantity.symbol.code().raw());
+    auto        stake_itr       = token_stakes.find(staker.value);
 
     if (stake_itr == token_stakes.end()) {
         token_stakes.emplace(get_self(), [&](auto& _stake) {
@@ -199,9 +197,9 @@ ACTION rwax::tokenize(
 
     check(maximum_supply.amount > 0, "Must provide positive supply");
 
-    templates_t collection_templates = get_templates(collection_name);
-    
-    uint32_t total_assets_to_tokenize = 0;
+    templates_t collection_templates        = get_templates(collection_name);
+    uint32_t    total_assets_to_tokenize    = 0;
+
     for (TEMPLATE templ : templates) {
         check(templ.max_assets_to_tokonize > 0, "Need to provide a maximum number of assets to tokenize");
         total_assets_to_tokenize += templ.max_assets_to_tokonize;
@@ -292,8 +290,8 @@ ACTION rwax::tokenize(
 
 
 ACTION rwax::tokenizenfts(
-    name user,
-    vector<uint64_t> asset_ids
+    name                user,
+    vector<uint64_t>    asset_ids
 ) {
     require_auth(user);
 

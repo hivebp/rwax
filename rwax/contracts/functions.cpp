@@ -32,26 +32,19 @@ void rwax::add_balances(name account, vector<asset> tokens) {
 }
 
 asset rwax::calculate_issued_tokens(
-    uint64_t asset_id, 
-    int32_t template_id
+    uint64_t    asset_id, 
+    int32_t     template_id
 ) {
-    assets_t own_assets = get_assets(get_self());
-    auto asset_itr = own_assets.find(asset_id);
-
-    templates_t templates = get_templates(asset_itr->collection_name);
-    schemas_t schemas = get_schemas(asset_itr->collection_name);
-
-    auto template_itr = templates.find(template_id);
-
-    auto schema_itr = schemas.find(template_itr->schema_name.value);
-
-    auto template_pool_itr = templpools.find(template_itr->template_id);
-
-    auto token_itr = tokens.find(template_pool_itr->token_share.symbol.code().raw());
-
-    auto trait_itr = traitfactors.find(template_pool_itr->token_share.symbol.code().raw());
-
-    float factor = 1;
+    assets_t    own_assets          = get_assets(get_self());
+    auto        asset_itr           = own_assets.find(asset_id);
+    templates_t templates           = get_templates(asset_itr->collection_name);
+    schemas_t   schemas             = get_schemas(asset_itr->collection_name);
+    auto        template_itr        = templates.find(template_id);
+    auto        schema_itr          = schemas.find(template_itr->schema_name.value);
+    auto        template_pool_itr   = templpools.find(template_itr->template_id);
+    auto        token_itr           = tokens.find(template_pool_itr->token_share.symbol.code().raw());
+    auto        trait_itr           = traitfactors.find(template_pool_itr->token_share.symbol.code().raw());
+    float       factor              = 1;
 
     if (trait_itr != traitfactors.end() && trait_itr->trait_factors.size() > 0) {
         float max_factor = get_maximum_factor(trait_itr->trait_factors);
@@ -78,24 +71,24 @@ asset rwax::calculate_issued_tokens(
                 trait = deserialized_template_data[trait_factor.trait_name];
                 found = true;
             }
-            if (deserialized_immutable_data.find(trait_factor.trait_name) != deserialized_immutable_data.end()) {
+            if (!found && deserialized_immutable_data.find(trait_factor.trait_name) != deserialized_immutable_data.end()) {
                 trait = deserialized_immutable_data[trait_factor.trait_name];
                 found = true;
             }
-            if (deserialized_mutable_data.find(trait_factor.trait_name) == deserialized_mutable_data.end()) {
+            if (!found && deserialized_mutable_data.find(trait_factor.trait_name) == deserialized_mutable_data.end()) {
                 trait = deserialized_mutable_data[trait_factor.trait_name];
                 found = true;
             }
 
-            if (found) {
+            if (found && trait_factor.values.size() > 0) {
                 string trait_value = std::get<string>(trait);
-                if (trait_factor.values.size() > 0) {
-                    for (VALUEFACTOR value : trait_factor.values) {
-                        if (value.value == trait_value) {
-                            factor *= value.factor;
-                        }
+
+                for (VALUEFACTOR value : trait_factor.values) {
+                    if (value.value == trait_value) {
+                        factor *= value.factor;
                     }
                 }
+
             }
         }
 
