@@ -1,48 +1,40 @@
 #pragma once
 
 void rwax::receive_any_transfer(
-    name from,
-    name to,
-    asset quantity,
-    string memo
+    name    from,
+    name    to,
+    asset   quantity,
+    string  memo
 ) {
     name contract = get_first_receiver();
     
-    if (to != get_self() || (memo != "redeem" && memo != "stake")) {
-        return;
-    }
+    if (from == _self || to != _self || quantity.amount < 0) return;
 
+    check(quantity.amount > 0, "Quantity must be positive");
     check(is_token_supported(contract, quantity.symbol), "Token not supported");
 
     if ((memo == "redeem" || memo == "stake") && contract == RWAX_TOKEN_CONTRACT) {
-        name account = from;
-        vector<asset> tokens = {};
-        tokens.push_back(quantity);
-        add_balances(account, tokens);
+        add_balances(from, {quantity});
     }
 
-    if (memo == "reward") {
-        stakepools_t stakepools = get_stakepools(from);
-
-        auto pool_itr = stakepools.find(quantity.symbol.code().raw());
+    else if (memo == "reward") {
+        stakepools_t    stakepools  = get_stakepools(from);
+        auto            pool_itr    = stakepools.find(quantity.symbol.code().raw());
 
         if (pool_itr == stakepools.end()) {
             return;
         }
 
-        stakes_t stakes = get_stakes(pool_itr->stake_token.code().raw());
-
-        auto stake_itr = stakes.begin();
-
-        asset total_staked = stake_itr->amount;
-        total_staked.amount = 0;
+        stakes_t    stakes          = get_stakes(pool_itr->stake_token.code().raw());
+        auto        stake_itr       = stakes.begin();
+        asset       total_staked    = asset(0, stake_itr->amount.symbol);
+        asset       rest_amount     = quantity;
 
         while (stake_itr != stakes.end()) {
             total_staked += stake_itr->amount;
             stake_itr++;
         };
 
-        asset rest_amount = quantity;
         while (stake_itr != stakes.end()) {
             stakes.modify(stake_itr, same_payer, [&](auto& modified_stake) {
                 asset cut = asset(quantity.amount * ((double)modified_stake.amount.amount / (double)total_staked.amount), quantity.symbol);
@@ -52,7 +44,7 @@ void rwax::receive_any_transfer(
                 }
                 vector<asset> new_tokens = modified_stake.rewarded_tokens;
                 bool found = false;
-                if (modified_stake.rewarded_tokens.size() == 1 && modified_stake.rewarded_tokens[0].symbol == CORE_SYMBOL && modified_stake.rewarded_tokens[0].amount == 0) {
+                if (modified_stake.rewarded_tokens.size() == 1 && modified_stake.rewarded_tokens[0] == ZERO_CORE) {
                     modified_stake.rewarded_tokens = {};
                 }
                 for (int j = 0; j < modified_stake.rewarded_tokens.size() && !found; ++j) { 
@@ -67,6 +59,9 @@ void rwax::receive_any_transfer(
             });
             stake_itr++;
         }
+    }
+    else{
+        check(false, "Unsupported memo");
     }
 }
 

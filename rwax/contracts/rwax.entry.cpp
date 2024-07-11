@@ -43,7 +43,7 @@ ACTION rwax::claim(
     token_stakes.erase(stake_itr);
 
     token_stakes.modify(stake_itr, same_payer, [&](auto& _item) {
-        _item.rewarded_tokens = {asset(0, CORE_SYMBOL)};
+        _item.rewarded_tokens = {ZERO_CORE};
     });
 }
 
@@ -175,7 +175,7 @@ ACTION rwax::stake(
         token_stakes.emplace(get_self(), [&](auto& _stake) {
             _stake.staker           = staker;
             _stake.amount           = quantity;
-            _stake.rewarded_tokens  = {asset(0, CORE_SYMBOL)};
+            _stake.rewarded_tokens  = {ZERO_CORE};
         });
     } else {
         token_stakes.modify(stake_itr, staker, [&](auto& modified_item) {
