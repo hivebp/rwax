@@ -8,7 +8,7 @@ void rwax::receive_any_transfer(
 ) {
     name contract = get_first_receiver();
     
-    if (from == _self || to != _self || quantity.amount < 0) return;
+    if (from == _self || to != _self || quantity.amount == 0) return;
 
     check(quantity.amount > 0, "Quantity must be positive");
     check(is_token_supported(contract, quantity.symbol), "Token not supported");
