@@ -96,6 +96,14 @@ public:
         vector<uint64_t> asset_ids
     );
 
+    ACTION settokenfee(
+        asset fees
+    );
+
+    ACTION setredeemfee(
+        asset fees
+    );
+
     ACTION erasetoken(
         name authorized_account,
         TOKEN_BALANCE token
@@ -115,11 +123,6 @@ public:
         name pool,
         symbol reward_token,
         symbol stake_token
-    );
-
-    ACTION claim(
-        name staker,
-        asset token
     );
 private:
     asset calculate_issued_tokens(
@@ -158,10 +161,6 @@ private:
         name receiver
     );
 
-    name get_token_contract(
-        symbol token_symbol
-    );
-
     name find_asset_pool(
         asset token
     );
@@ -172,8 +171,9 @@ private:
 
     TABLE config_s {
         string version                               = "1.0.0";
-        vector<TOKEN> supported_tokens               = {};
         vector<name> stake_pools                     = {};
+        asset redeem_fees;
+        asset tokenize_fees;
     };
 
     typedef singleton <name("config"), config_s>           config_t;
@@ -276,6 +276,7 @@ private:
         uint32_t max_assets_to_tokonize;
         uint32_t currently_tokenized;
         asset token_share;
+        name contract;
 
         uint64_t primary_key() const { return (uint64_t) template_id; } 
     };
@@ -305,18 +306,20 @@ private:
     typedef eosio::multi_index<name("rewards"), rewards_s> rewards_t;
     typedef eosio::multi_index<name("stakepools"), stakepools_s> stakepools_t;
     typedef eosio::multi_index<name("traitfactors"), traitfactors_s> traitfactors_t;
-    typedef multi_index <name("schemas"), schemas_s> schemas_t;
+    typedef eosio::multi_index <name("schemas"), schemas_s> schemas_t;
     
     collections_t collections = collections_t(name("atomicassets"), name("atomicassets").value);
-    tokens_t tokens = tokens_t(get_self(), get_self().value);
     templpools_t templpools = templpools_t(get_self(), get_self().value);
     transfers_t transfers = transfers_t(get_self(), get_self().value);
     balances_t balances = balances_t(get_self(), get_self().value);
     config_t config = config_t(get_self(), get_self().value);
-    traitfactors_t traitfactors = traitfactors_t(get_self(), get_self().value);
 
     tokens_t get_tokens(name contract) {
         return tokens_t(get_self(), contract.value);
+    }
+
+    traitfactors_t get_traitfactors(name contract) {
+        return traitfactors_t(get_self(), contract.value);
     }
 
     templates_t get_templates(name collection_name) {

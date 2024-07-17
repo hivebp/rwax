@@ -24,6 +24,18 @@ ACTION rwax::createtoken(
         check(templ.max_assets_to_tokonize > 0, "Need to provide a maximum number of assets to tokenize");
         total_assets_to_tokenize += templ.max_assets_to_tokonize;
     }
+
+    config_s current_config = config.get();
+    asset fees = current_config.tokenize_fees;
+    if (fees.amount > 0) {
+        vector<TOKEN_BALANCE> fee_assets = {};
+        TOKEN_BALANCE fee_asset = {};
+        fee_asset.quantity = fees;
+        fee_asset.contract = RWAX_TOKEN_CONTRACT;
+        fee_assets.push_back(fee_asset);
+        withdraw_balances(authorized_account, fee_assets);
+        add_balances(get_self(), fee_assets);
+    }
     
     for (TEMPLATE templ : templates) {
         int32_t template_id = templ.template_id;
@@ -51,8 +63,11 @@ ACTION rwax::createtoken(
             new_pool.max_assets_to_tokonize = templ.max_assets_to_tokonize;
             new_pool.currently_tokenized = 0;
             new_pool.token_share = template_supply;
+            new_pool.contract = contract;
         });
     }
+
+    tokens_t tokens = get_tokens(contract);
 
     auto token_itr = tokens.find(maximum_supply.symbol.code().raw());
 
@@ -72,6 +87,7 @@ ACTION rwax::createtoken(
     }
 
     if (trait_factors.size() > 0) {
+        traitfactors_t traitfactors = get_traitfactors(contract);
         traitfactors.emplace(authorized_account, [&](auto& new_factor) {
             new_factor.token = maximum_supply.symbol;
             new_factor.trait_factors = trait_factors;
@@ -130,6 +146,8 @@ ACTION rwax::erasetoken(
     TOKEN_BALANCE token
 ) {
     require_auth(authorized_account);
+
+    tokens_t tokens = get_tokens(token.contract);
 
     auto token_itr = tokens.require_find(token.quantity.symbol.code().raw(), "Token not found");
 
@@ -288,7 +306,11 @@ asset rwax::calculate_issued_tokens(
 
     auto template_pool_itr = templpools.find(template_itr->template_id);
 
+    tokens_t tokens = get_tokens(template_pool_itr->contract);
+
     auto token_itr = tokens.find(template_pool_itr->token_share.symbol.code().raw());
+
+    traitfactors_t traitfactors = get_traitfactors(template_pool_itr->contract);
 
     auto trait_itr = traitfactors.find(template_pool_itr->token_share.symbol.code().raw());
 
@@ -386,6 +408,8 @@ void rwax::tokenize_asset(
         modified_item.currently_tokenized = modified_item.currently_tokenized + 1;
     });
 
+    tokens_t tokens = get_tokens(template_pool_itr->contract);
+
     auto token_itr = tokens.find(template_pool_itr->token_share.symbol.code().raw());
 
     check(token_itr != tokens.end(), "Token not found.");
@@ -439,6 +463,22 @@ ACTION rwax::init() {
     config.get_or_create(get_self(), config_s{});
 }
 
+ACTION rwax::settokenfee(
+    asset fees
+) {
+    config_s current_config = config.get();
+    current_config.redeem_fees = fees;
+    config.set(current_config, get_self());
+}
+
+ACTION rwax::setredeemfee(
+    asset fees
+) {
+    config_s current_config = config.get();
+    current_config.tokenize_fees = fees;
+    config.set(current_config, get_self());
+}
+
 ACTION rwax::addstakepool(
     name pool,
     symbol reward_token,
@@ -463,42 +503,6 @@ ACTION rwax::addstakepool(
     config.set(current_config, get_self());
 }
 
-ACTION rwax::claim(
-    name staker,
-    asset token
-) {
-    require_auth(staker);
-
-    stakes_t token_stakes = get_stakes(token.symbol.code().raw());
-
-    auto stake_itr = token_stakes.require_find(staker.value, "Stake not found");
-
-    for (asset token : stake_itr->rewarded_tokens) {
-        name contract = get_token_contract(token.symbol);
-
-        action(
-            permission_level{get_self(), name("active")},
-            contract,
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                staker,
-                token,
-                string("Claiming staking rewards")
-            )
-        ).send();
-    }
-
-    token_stakes.erase(stake_itr);
-
-    vector<asset> reward_placeholder = {};
-    asset reward = asset(0, CORE_SYMBOL);
-
-    token_stakes.modify(stake_itr, same_payer, [&](auto& _item) {
-        _item.rewarded_tokens = reward_placeholder;
-    });
-}
-
 ACTION rwax::redeem(
     name redeemer,
     TOKEN_BALANCE amount
@@ -507,6 +511,18 @@ ACTION rwax::redeem(
 
     auto balance_itr = balances.require_find(redeemer.value, "No balance object found");
 
+    config_s current_config = config.get();
+    asset fees = current_config.redeem_fees;
+    if (fees.amount > 0) {
+        vector<TOKEN_BALANCE> fee_assets = {};
+        TOKEN_BALANCE fee_asset = {};
+        fee_asset.quantity = fees;
+        fee_asset.contract = RWAX_TOKEN_CONTRACT;
+        fee_assets.push_back(fee_asset);
+        withdraw_balances(redeemer, fee_assets);
+        add_balances(get_self(), fee_assets);
+    }
+
     check(amount.quantity.amount > 0, "Must redeem positive amount");
 
     vector<TOKEN_BALANCE> assets = {};
@@ -514,6 +530,8 @@ ACTION rwax::redeem(
     assets.push_back(amount);
 
     withdraw_balances(redeemer, assets);
+
+    tokens_t tokens = get_tokens(amount.contract);
 
     auto token_itr = tokens.require_find(amount.quantity.symbol.code().raw(), "Token not found");
     asset issued_supply = token_itr->issued_supply;
@@ -577,19 +595,6 @@ ACTION rwax::redeem(
     tokens.modify(token_itr, same_payer, [&](auto& modified_item) {
         modified_item.issued_supply = modified_item.issued_supply - required_amount;
     });
-}
-
-name rwax::get_token_contract(
-    symbol token_symbol
-) {
-    config_s current_config = config.get();
-
-    for (TOKEN supported_token : current_config.supported_tokens) {
-        if (supported_token.token_symbol == token_symbol) {
-            return supported_token.token_contract;
-        }
-    }
-    return name("eosio.token");
 }
 
 ACTION rwax::withdraw(
@@ -698,13 +703,13 @@ void rwax::receive_transfer(
 ) {
     name contract = get_first_receiver();
     
-    if (to != get_self() || (memo != "redeem" && memo != "stake")) {
+    if (to != get_self() || (memo != "redeem" && memo != "payfee")) {
         return;
     }
 
     check(is_token_supported(contract, quantity.symbol), "Token not supported");
 
-    if ((memo == "redeem" || memo == "stake") && contract == RWAX_TOKEN_CONTRACT) {
+    if (memo == "redeem" || memo == "payfee") {
         name account = from;
         vector<TOKEN_BALANCE> tokens = {};
         TOKEN_BALANCE new_balance = {};
@@ -712,54 +717,6 @@ void rwax::receive_transfer(
         new_balance.contract = contract;
         tokens.push_back(new_balance);
         add_balances(account, tokens);
-    }
-
-    if (memo == "reward") {
-        stakepools_t stakepools = get_stakepools(from);
-
-        auto pool_itr = stakepools.find(quantity.symbol.code().raw());
-
-        if (pool_itr == stakepools.end()) {
-            return;
-        }
-
-        stakes_t stakes = get_stakes(pool_itr->stake_token.code().raw());
-
-        auto stake_itr = stakes.begin();
-
-        asset total_staked = stake_itr->amount;
-        total_staked.amount = 0;
-
-        while (stake_itr != stakes.end()) {
-            total_staked += stake_itr->amount;
-            stake_itr++;
-        };
-
-        asset rest_amount = quantity;
-        while (stake_itr != stakes.end()) {
-            stakes.modify(stake_itr, same_payer, [&](auto& modified_stake) {
-                asset cut = asset(quantity.amount * ((double)modified_stake.amount.amount / (double)total_staked.amount), quantity.symbol);
-                rest_amount -= cut;
-                if (rest_amount.amount < 0) {
-                    cut += rest_amount;
-                }
-                vector<asset> new_tokens = modified_stake.rewarded_tokens;
-                bool found = false;
-                if (modified_stake.rewarded_tokens.size() == 1 && modified_stake.rewarded_tokens[0].symbol == CORE_SYMBOL && modified_stake.rewarded_tokens[0].amount == 0) {
-                    modified_stake.rewarded_tokens = {};
-                }
-                for (int j = 0; j < modified_stake.rewarded_tokens.size() && !found; ++j) { 
-                    if (modified_stake.rewarded_tokens[j].symbol == cut.symbol) {
-                        found = true;
-                        modified_stake.rewarded_tokens[j].amount += cut.amount;
-                    }
-                }
-                if (!found && cut.amount > 0) {
-                    modified_stake.rewarded_tokens.push_back(cut);
-                }
-            });
-            stake_itr++;
-        }
     }
 }
 
