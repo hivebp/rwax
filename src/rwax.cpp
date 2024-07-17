@@ -2,10 +2,11 @@
 
 using json = nlohmann::json;
 
-ACTION rwax::tokenize(
+ACTION rwax::createtoken(
     name authorized_account,
     name collection_name,
     asset maximum_supply,
+    name contract,
     vector<TEMPLATE> templates,
     vector<TRAITFACTOR> trait_factors,
     string token_name,
@@ -80,43 +81,57 @@ ACTION rwax::tokenize(
     tokens.emplace(authorized_account, [&](auto& new_token) {
         new_token.maximum_supply = maximum_supply;
         new_token.issued_supply = issued_supply;
+        new_token.contract = contract;
         new_token.collection_name = collection_name;
         new_token.authorized_account = authorized_account;
         new_token.templates = templates;
     });
 
-    action(
-        permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
-        name("create"),
-        make_tuple(
-            get_self(),
-            maximum_supply,
-            string(token_name),
-            string(token_logo),
-            string(token_logo_lg)
-        )
-    ).send();
+    if (contract == RWAX_TOKEN_CONTRACT) {
+        action(
+            permission_level{get_self(), name("active")},
+            RWAX_TOKEN_CONTRACT,
+            name("create"),
+            make_tuple(
+                get_self(),
+                maximum_supply,
+                string(token_name),
+                string(token_logo),
+                string(token_logo_lg)
+            )
+        ).send();
 
-    action(
-        permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
-        name("issue"),
-        make_tuple(
-            get_self(),
-            maximum_supply,
-            string("Initialize New Token")
-        )
-    ).send();
+        action(
+            permission_level{get_self(), name("active")},
+            RWAX_TOKEN_CONTRACT,
+            name("issue"),
+            make_tuple(
+                get_self(),
+                maximum_supply,
+                string("Initialize New Token")
+            )
+        ).send();
+    } else {
+        auto balance_itr = balances.require_find(authorized_account.value, "No balance object found");
+
+        vector<TOKEN_BALANCE> assets = {};
+        TOKEN_BALANCE new_balance = {};
+        new_balance.quantity = maximum_supply;
+        new_balance.contract = contract;
+
+        assets.push_back(new_balance);
+
+        withdraw_balances(authorized_account, assets);
+    }
 }
 
 ACTION rwax::erasetoken(
     name authorized_account,
-    asset token
+    TOKEN_BALANCE token
 ) {
     require_auth(authorized_account);
 
-    auto token_itr = tokens.require_find(token.symbol.code().raw(), "Token not found");
+    auto token_itr = tokens.require_find(token.quantity.symbol.code().raw(), "Token not found");
 
     check(token_itr->authorized_account == authorized_account, "No authorized to erase Token");
 
@@ -127,7 +142,7 @@ ACTION rwax::erasetoken(
         }
     }
 
-    assetpools_t asset_pools = get_assetpool(token.symbol.code().raw());
+    assetpools_t asset_pools = get_assetpool(token.quantity.symbol.code().raw());
 
     auto apool_itr = asset_pools.begin();
 
@@ -140,13 +155,13 @@ ACTION rwax::erasetoken(
 
     action(
         permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
+        token.contract,
         name("transfer"),
         make_tuple(
             get_self(),
             authorized_account,
             token_itr->maximum_supply - token_itr->issued_supply,
-            string("rWAX: Erasing Token")
+            string("RWAX: Erasing Token")
         )
     ).send();
 
@@ -159,7 +174,7 @@ ACTION rwax::erasetoken(
                 get_self(),
                 authorized_account,
                 asset_ids,
-                string("rWAX: Erasing Token")
+                string("RWAX: Erasing Token")
             )
         ).send();
     }
@@ -217,7 +232,7 @@ bool rwax::is_token_supported(
     name token_contract,
     symbol token_symbol
 ) {
-    check(token_contract == RWAX_TOKEN_CONTRACT || token_contract == CORE_TOKEN_CONTRACT, "Unsupported token contract");
+    tokens_t tokens = get_tokens(token_contract);
 
     auto token_itr = tokens.find(token_symbol.code().raw());
 
@@ -419,42 +434,6 @@ void rwax::tokenize_asset(
     ).send();
 }
 
-ACTION rwax::stake(
-    name staker,
-    asset quantity
-) {
-    require_auth(staker);
-
-    auto balance_itr = balances.require_find(staker.value, "No balance object found");
-
-    check(quantity.amount > 0, "Must redeem positive amount");
-
-    vector<asset> assets = {};
-
-    assets.push_back(quantity);
-
-    withdraw_balances(staker, assets);
-
-    stakes_t token_stakes = get_stakes(quantity.symbol.code().raw());
-
-    auto stake_itr = token_stakes.find(staker.value);
-
-    if (stake_itr == token_stakes.end()) {
-        vector<asset> reward_placeholder = {};
-        asset reward = asset(0, CORE_SYMBOL);
-        reward_placeholder.push_back(reward);
-        token_stakes.emplace(get_self(), [&](auto& _stake) {
-            _stake.staker = staker;
-            _stake.amount = quantity;
-            _stake.rewarded_tokens = reward_placeholder;
-        });
-    } else {
-        token_stakes.modify(stake_itr, staker, [&](auto& modified_item) {
-            modified_item.amount = modified_item.amount + quantity;
-        });
-    }
-}
-
 ACTION rwax::init() {
     require_auth(get_self());
     config.get_or_create(get_self(), config_s{});
@@ -482,55 +461,6 @@ ACTION rwax::addstakepool(
     current_pools.push_back(pool);
     current_config.stake_pools = current_pools;
     config.set(current_config, get_self());
-}
-
-ACTION rwax::unstake(
-    name staker,
-    asset quantity
-) {
-    require_auth(staker);
-
-    stakes_t token_stakes = get_stakes(quantity.symbol.code().raw());
-
-    auto stake_itr = token_stakes.require_find(staker.value, "Stake not found");
-
-    check(stake_itr->amount.amount >= quantity.amount, "Overdrawn Balance");
-
-    action(
-        permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
-        name("transfer"),
-        make_tuple(
-            get_self(),
-            staker,
-            quantity,
-            string("Returning staked amount")
-        )
-    ).send();
-
-    if (quantity.amount == stake_itr->amount.amount) {
-        for (asset token : stake_itr->rewarded_tokens) {
-            name contract = get_token_contract(token.symbol);
-
-            action(
-                permission_level{get_self(), name("active")},
-                contract,
-                name("transfer"),
-                make_tuple(
-                    get_self(),
-                    staker,
-                    token,
-                    string("Returning staking rewards")
-                )
-            ).send();
-        }
-
-        token_stakes.erase(stake_itr);
-    } else {
-        token_stakes.modify(stake_itr, staker, [&](auto& modified_item) {
-            modified_item.amount = modified_item.amount - quantity;
-        });
-    }
 }
 
 ACTION rwax::claim(
@@ -571,21 +501,21 @@ ACTION rwax::claim(
 
 ACTION rwax::redeem(
     name redeemer,
-    asset quantity
+    TOKEN_BALANCE amount
 ) {
     require_auth(redeemer);
 
     auto balance_itr = balances.require_find(redeemer.value, "No balance object found");
 
-    check(quantity.amount > 0, "Must redeem positive amount");
+    check(amount.quantity.amount > 0, "Must redeem positive amount");
 
-    vector<asset> assets = {};
+    vector<TOKEN_BALANCE> assets = {};
 
-    assets.push_back(quantity);
+    assets.push_back(amount);
 
     withdraw_balances(redeemer, assets);
 
-    auto token_itr = tokens.require_find(quantity.symbol.code().raw(), "Token not found");
+    auto token_itr = tokens.require_find(amount.quantity.symbol.code().raw(), "Token not found");
     asset issued_supply = token_itr->issued_supply;
     uint32_t total_assets_tokenized = 0;
     for (TEMPLATE templ : token_itr->templates) {
@@ -593,7 +523,7 @@ ACTION rwax::redeem(
         total_assets_tokenized += templ_itr->currently_tokenized;
     }
 
-    assetpools_t asset_pools = get_assetpool(quantity.symbol.code().raw());
+    assetpools_t asset_pools = get_assetpool(amount.quantity.symbol.code().raw());
     auto apool_itr = asset_pools.begin();
     check(apool_itr != asset_pools.end(), "No assets available");
 
@@ -611,7 +541,7 @@ ACTION rwax::redeem(
 
     asset required_amount = calculate_issued_tokens(apool_itr->asset_id, asset_itr->template_id);
 
-    if (required_amount.amount < quantity.amount) {
+    if (required_amount.amount < amount.quantity.amount) {
         check(false, ("Invalid amount. Must transfer exactly " + required_amount.to_string()).c_str());
     }
 
@@ -663,7 +593,7 @@ name rwax::get_token_contract(
 }
 
 ACTION rwax::withdraw(
-    vector<asset> tokens,
+    vector<TOKEN_BALANCE> tokens,
     name account
 ) {
     require_auth(account);
@@ -672,33 +602,31 @@ ACTION rwax::withdraw(
 
     withdraw_balances(account, tokens);
 
-    for (asset token : tokens) {
-        name contract = get_token_contract(token.symbol);
-
+    for (TOKEN_BALANCE token : tokens) {
         action(
             permission_level{get_self(), name("active")},
-            contract,
+            token.contract,
             name("transfer"),
             make_tuple(
                 get_self(),
                 account,
-                token,
-                string("NFTHive craft Balance Withdrawal")
+                token.quantity,
+                string("RWAX Balance Withdrawal")
             )
         ).send();
     }
 }
 
-void rwax::withdraw_balances(name account, vector<asset> tokens) {
+void rwax::withdraw_balances(name account, vector<TOKEN_BALANCE> tokens) {
     auto balance_itr = balances.require_find(account.value, "No balance object found");
 
-    vector<asset> new_balances;
+    vector<TOKEN_BALANCE> new_balances;
 
     // Check for existing balances that won't get modified first. Add them unchanged
     for (int i = 0; i < balance_itr->assets.size(); i++) {
         bool found = false;
-        for (asset token : tokens) {
-            if (token.symbol == balance_itr->assets[i].symbol) {
+        for (TOKEN_BALANCE token : tokens) {
+            if (token.quantity.symbol == balance_itr->assets[i].quantity.symbol) {
                 found = true;
             }
         }
@@ -708,14 +636,17 @@ void rwax::withdraw_balances(name account, vector<asset> tokens) {
     }
 
     // Process the balances that get modified.
-    for (asset token : tokens) {
+    for (TOKEN_BALANCE token : tokens) {
         bool found = false;
         for (int i = 0; i < balance_itr->assets.size() && !found; i++) {
-            if (balance_itr->assets[i].symbol == token.symbol) {
-                asset new_amount = balance_itr->assets[i] - token;
-                check(new_amount.amount >= 0 && token.amount >= 0, "Overdrawn Balance");
+            if (balance_itr->assets[i].quantity.symbol == token.quantity.symbol) {
+                asset new_amount = balance_itr->assets[i].quantity - token.quantity;
+                check(new_amount.amount >= 0 && token.quantity.amount >= 0, "Overdrawn Balance");
                 if (new_amount.amount > 0) {
-                    new_balances.push_back(new_amount);
+                    TOKEN_BALANCE new_balance = {};
+                    new_balance.quantity = new_amount;
+                    new_balance.contract = token.contract;
+                    new_balances.push_back(new_balance);
                 }
                 found = true;
             }
@@ -732,17 +663,17 @@ void rwax::withdraw_balances(name account, vector<asset> tokens) {
     }    
 }
 
-void rwax::add_balances(name account, vector<asset> tokens) {
+void rwax::add_balances(name account, vector<TOKEN_BALANCE> tokens) {
     auto balance_itr = balances.find(account.value);
 
     if (balance_itr != balances.end()) {
         balances.modify(balance_itr, same_payer, [&](auto& modified_balance) {
-            for (asset token : tokens) {
+            for (TOKEN_BALANCE token : tokens) {
                 bool found = false;
                 for (int i = 0; i <= modified_balance.assets.size(); i++) {
-                    if (modified_balance.assets[i].symbol == token.symbol) {
-                        int64_t new_amount = modified_balance.assets[i].amount + token.amount;
-                        modified_balance.assets[i].set_amount(new_amount);
+                    if (modified_balance.assets[i].quantity.symbol == token.quantity.symbol) {
+                        int64_t new_amount = modified_balance.assets[i].quantity.amount + token.quantity.amount;
+                        modified_balance.assets[i].quantity.set_amount(new_amount);
                         found = true;
                     }
                 }
@@ -775,8 +706,11 @@ void rwax::receive_transfer(
 
     if ((memo == "redeem" || memo == "stake") && contract == RWAX_TOKEN_CONTRACT) {
         name account = from;
-        vector<asset> tokens = {};
-        tokens.push_back(quantity);
+        vector<TOKEN_BALANCE> tokens = {};
+        TOKEN_BALANCE new_balance = {};
+        new_balance.quantity = quantity;
+        new_balance.contract = contract;
+        tokens.push_back(new_balance);
         add_balances(account, tokens);
     }
 

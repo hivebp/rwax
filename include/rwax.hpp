@@ -19,6 +19,11 @@ struct TOKEN {
     symbol token_symbol;
 };
 
+struct TOKEN_BALANCE {
+    name   contract;
+    asset  quantity;
+};
+
 struct POOL {
     name pool;
     symbol token;
@@ -74,10 +79,11 @@ public:
 
     ACTION init();
 
-    ACTION tokenize(
+    ACTION createtoken(
         name authorized_account,
         name collection_name,
         asset maximum_supply,
+        name contract,
         vector<TEMPLATE> templates,
         vector<TRAITFACTOR> trait_factors,
         string token_name,
@@ -92,33 +98,23 @@ public:
 
     ACTION erasetoken(
         name authorized_account,
-        asset token
+        TOKEN_BALANCE token
     );
 
     ACTION withdraw(
-        vector<asset> tokens,
+        vector<TOKEN_BALANCE> tokens,
         name account
     );
 
     ACTION redeem(
         name redeemer,
-        asset quantity
-    );
-
-    ACTION stake(
-        name staker,
-        asset quantity
+        TOKEN_BALANCE amount
     );
 
     ACTION addstakepool(
         name pool,
         symbol reward_token,
         symbol stake_token
-    );
-
-    ACTION unstake(
-        name staker,
-        asset quantity
     );
 
     ACTION claim(
@@ -133,12 +129,12 @@ private:
 
     void withdraw_balances(
         name account,
-        vector<asset> tokens
+        vector<TOKEN_BALANCE> tokens
     );
 
     void add_balances(
         name account,
-        vector<asset> tokens
+        vector<TOKEN_BALANCE> tokens
     );
 
     void check_has_collection_auth(
@@ -232,6 +228,7 @@ private:
     TABLE tokens_s {
         asset maximum_supply;
         asset issued_supply;
+        name contract;
         name authorized_account;
         name collection_name;
         vector<TEMPLATE> templates;
@@ -241,7 +238,7 @@ private:
 
     TABLE balances_s {
         name account;
-        vector<asset> assets;
+        vector<TOKEN_BALANCE> assets;
 
         uint64_t primary_key() const { return account.value; };
     };
@@ -317,6 +314,10 @@ private:
     balances_t balances = balances_t(get_self(), get_self().value);
     config_t config = config_t(get_self(), get_self().value);
     traitfactors_t traitfactors = traitfactors_t(get_self(), get_self().value);
+
+    tokens_t get_tokens(name contract) {
+        return tokens_t(get_self(), contract.value);
+    }
 
     templates_t get_templates(name collection_name) {
         return templates_t(name("atomicassets"), collection_name.value);
