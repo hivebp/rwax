@@ -21,8 +21,8 @@ ACTION rwax::createtoken(
     
     uint32_t total_assets_to_tokenize = 0;
     for (TEMPLATE templ : templates) {
-        check(templ.max_assets_to_tokonize > 0, "Need to provide a maximum number of assets to tokenize");
-        total_assets_to_tokenize += templ.max_assets_to_tokonize;
+        check(templ.max_assets_to_tokenize > 0, "Need to provide a maximum number of assets to tokenize");
+        total_assets_to_tokenize += templ.max_assets_to_tokenize;
     }
 
     config_s current_config = config.get();
@@ -46,7 +46,7 @@ ACTION rwax::createtoken(
         }
 
         if (template_itr->max_supply > 0) {
-            check(templ.max_assets_to_tokonize <= template_itr->max_supply,
+            check(templ.max_assets_to_tokenize <= template_itr->max_supply,
                 "Templates actual supply is less than given max supply");
         }
 
@@ -56,13 +56,13 @@ ACTION rwax::createtoken(
             check(false, ("Template " + to_string(template_id) + " has already been tokenized").c_str());
         }
 
-        asset template_supply = asset(maximum_supply.amount * (templ.max_assets_to_tokonize / total_assets_to_tokenize), maximum_supply.symbol);
+        asset template_supply = asset(maximum_supply.amount * (templ.max_assets_to_tokenize / total_assets_to_tokenize), maximum_supply.symbol);
 
         templpools.emplace(authorized_account, [&](auto& new_pool) {
             new_pool.template_id = template_id;
-            new_pool.max_assets_to_tokonize = templ.max_assets_to_tokonize;
+            new_pool.max_assets_to_tokenize = templ.max_assets_to_tokenize;
             new_pool.currently_tokenized = 0;
-            new_pool.token_share = template_supply;
+            new_pool.token = maximum_supply;
             new_pool.contract = contract;
         });
     }
@@ -143,15 +143,16 @@ ACTION rwax::createtoken(
 
 ACTION rwax::erasetoken(
     name authorized_account,
-    TOKEN_BALANCE token
+    name contract,
+    symbol token_symbol
 ) {
     require_auth(authorized_account);
 
-    tokens_t tokens = get_tokens(token.contract);
+    tokens_t tokens = get_tokens(contract);
 
-    auto token_itr = tokens.require_find(token.quantity.symbol.code().raw(), "Token not found");
+    auto token_itr = tokens.begin();
 
-    check(token_itr->authorized_account == authorized_account, "No authorized to erase Token");
+    check(token_itr->authorized_account == authorized_account, "Not authorized to erase Token");
 
     for (TEMPLATE tmpl : token_itr->templates) {
         auto template_pool_itr = templpools.find(tmpl.template_id);
@@ -160,7 +161,9 @@ ACTION rwax::erasetoken(
         }
     }
 
-    assetpools_t asset_pools = get_assetpool(token.quantity.symbol.code().raw());
+    check(false, "Hier?");
+
+    assetpools_t asset_pools = get_assetpool(token_symbol.code().raw());
 
     auto apool_itr = asset_pools.begin();
 
@@ -171,9 +174,17 @@ ACTION rwax::erasetoken(
         apool_itr = asset_pools.begin();
     }
 
+    traitfactors_t traitfactors = get_traitfactors(contract);
+
+    auto trait_itr = traitfactors.find(token_symbol.code().raw());
+    while (trait_itr != traitfactors.end()) {
+        traitfactors.erase(trait_itr);
+        trait_itr = traitfactors.find(token_symbol.code().raw());
+    }
+
     action(
         permission_level{get_self(), name("active")},
-        token.contract,
+        contract,
         name("transfer"),
         make_tuple(
             get_self(),
@@ -250,6 +261,10 @@ bool rwax::is_token_supported(
     name token_contract,
     symbol token_symbol
 ) {
+    if (token_contract == RWAX_TOKEN_CONTRACT && token_symbol == FEE_SYMBOL) {
+        return true;
+    }
+
     tokens_t tokens = get_tokens(token_contract);
 
     auto token_itr = tokens.find(token_symbol.code().raw());
@@ -259,26 +274,6 @@ bool rwax::is_token_supported(
     }
 
     return true;
-}
-
-name rwax::find_asset_pool(
-    asset token
-) {
-    config_s current_config = config.get();
-    bool found = false;
-    for (name pool : current_config.stake_pools) {
-        stakepools_t stakepools = get_stakepools(pool);
-        auto stake_itr = stakepools.begin();
-        while (stake_itr != stakepools.end() && !found) {
-            if (stake_itr->stake_token == token.symbol) {
-                return pool;
-            }
-
-            ++stake_itr;
-        }
-    }
-
-    return get_self();
 }
 
 float rwax::get_maximum_factor(vector<TRAITFACTOR> trait_factors) {
@@ -308,16 +303,20 @@ asset rwax::calculate_issued_tokens(
 
     tokens_t tokens = get_tokens(template_pool_itr->contract);
 
-    auto token_itr = tokens.find(template_pool_itr->token_share.symbol.code().raw());
+    auto token_itr = tokens.find(template_pool_itr->token.symbol.code().raw());
 
     traitfactors_t traitfactors = get_traitfactors(template_pool_itr->contract);
 
-    auto trait_itr = traitfactors.find(template_pool_itr->token_share.symbol.code().raw());
+    auto trait_itr = traitfactors.find(template_pool_itr->token.symbol.code().raw());
 
-    float factor = 1;
+    asset total_supply = token_itr->maximum_supply;
+    asset total_trait_factor_token_supply = asset(0, total_supply.symbol);
+    asset trait_factor_tokens = asset(0, total_supply.symbol);
 
     if (trait_itr != traitfactors.end() && trait_itr->trait_factors.size() > 0) {
-        float max_factor = get_maximum_factor(trait_itr->trait_factors);
+        for (TRAITFACTOR trait_factor : trait_itr->trait_factors) {
+            //total_trait_factor_token_supply += trait_factor.token_share;
+        }
         
         ATTRIBUTE_MAP deserialized_template_data = deserialize(
             template_itr->immutable_serialized_data,
@@ -334,7 +333,13 @@ asset rwax::calculate_issued_tokens(
             schema_itr->format
         );
 
+        int cnt = 0;
         for (TRAITFACTOR trait_factor : trait_itr->trait_factors) {
+            float factor = 1;
+
+            float avg_factor = 0;//trait_factor.avg_factor;
+            asset trait_factor_share = {};//trait_factor.token_share;
+
             ATOMIC_ATTRIBUTE trait;
             bool found = false;
             if (deserialized_template_data.find(trait_factor.trait_name) != deserialized_template_data.end()) {
@@ -345,35 +350,68 @@ asset rwax::calculate_issued_tokens(
                 trait = deserialized_immutable_data[trait_factor.trait_name];
                 found = true;
             }
-            if (deserialized_mutable_data.find(trait_factor.trait_name) == deserialized_mutable_data.end()) {
+            if (deserialized_mutable_data.find(trait_factor.trait_name) != deserialized_mutable_data.end()) {
                 trait = deserialized_mutable_data[trait_factor.trait_name];
                 found = true;
             }
 
             if (found) {
                 string trait_value = std::get<string>(trait);
+
                 if (trait_factor.values.size() > 0) {
                     for (VALUEFACTOR value : trait_factor.values) {
                         if (value.value == trait_value) {
-                            factor *= value.factor;
+                            factor = value.factor;
                         }
                     }
+                } else {
+                    double value = 0;
+                    for (FORMAT format : schema_itr->format) {
+                        if (format.name == trait_factor.trait_name) {
+                            if (format.type == "int8_t") {
+                                value = std::get<int8_t>(trait);
+                            } else if (format.type == "int16_t") {
+                                value = std::get<int16_t>(trait);
+                            } else if (format.type == "int32_t") {
+                                value = std::get<int32_t>(trait);
+                            } else if (format.type == "int64_t") {
+                                value = std::get<int64_t>(trait);
+                            } else if (format.type == "uint8_t") {
+                                value = std::get<uint8_t>(trait);
+                            } else if (format.type == "uint16_t") {
+                                value = std::get<uint16_t>(trait);
+                            } else if (format.type == "uint32_t") {
+                                value = std::get<uint32_t>(trait);
+                            } else if (format.type == "uint64") {
+                                value = std::get<uint64_t>(trait);
+                            } else if (format.type == "float") {
+                                value = std::get<float>(trait);
+                            } else if (format.type == "double") {
+                                value = std::get<double>(trait);
+                            }
+                        }
+                    }
+                    factor = ((trait_factor.max_factor - trait_factor.min_factor) / (trait_factor.max_value - trait_factor.min_value)) * (value - trait_factor.min_value) + trait_factor.min_factor;
                 }
             }
-        }
 
-        // We have to assume that the max token supply is devided by all redeemable assets when they're maxed out.
-        // Therefore the actual factor of any asset has to reduce the amount of issued tokens when it's lower than the maximum factor.
-        // Hence we divide the factor by the maximum factor.
-        factor /= max_factor;
+            asset trait_factor_tokens = asset(
+                0,
+                //(trait_factor.token_share.amount / token_itr->max_assets_to_tokenize) * (factor / avg_factor), 
+                token_itr->maximum_supply.symbol
+            );
+        }
     }
 
-    asset((template_pool_itr->token_share.amount / template_pool_itr->max_assets_to_tokonize) * factor, template_pool_itr->token_share.symbol);
+    return asset((total_supply.amount - total_trait_factor_token_supply.amount) / 
+    1
+        //token_itr->max_assets_to_tokenize
+        , total_supply.symbol) + total_trait_factor_token_supply;
 }
 
 void rwax::tokenize_asset(
     uint64_t asset_id,
-    name receiver
+    name tokenizer
 ) {
     assets_t own_assets = get_assets(get_self());
 
@@ -400,7 +438,7 @@ void rwax::tokenize_asset(
         check(false, ("Template " + to_string(asset_itr->template_id) + " cannot be tokenized. No Token exists").c_str());
     }
 
-    if (template_pool_itr->currently_tokenized >= template_pool_itr->max_assets_to_tokonize) {
+    if (template_pool_itr->currently_tokenized >= template_pool_itr->max_assets_to_tokenize) {
         check(false, ("Template " + to_string(asset_itr->template_id) + " cannot be tokenized. Maximum has been reached.").c_str());
     }
 
@@ -410,50 +448,51 @@ void rwax::tokenize_asset(
 
     tokens_t tokens = get_tokens(template_pool_itr->contract);
 
-    auto token_itr = tokens.find(template_pool_itr->token_share.symbol.code().raw());
+    auto token_itr = tokens.find(template_pool_itr->token.symbol.code().raw());
 
     check(token_itr != tokens.end(), "Token not found.");
 
     asset issued_tokens = calculate_issued_tokens(asset_id, template_itr->template_id);
+    check((token_itr->issued_supply + issued_tokens).amount <= token_itr->maximum_supply.amount, 
+        "Tokenization exceeds Token Supply. Wait until more assets have been redeemed or contact collection");
 
     tokens.modify(token_itr, same_payer, [&](auto& modified_item) {
         modified_item.issued_supply = modified_item.issued_supply + issued_tokens;
     });
 
-    assetpools_t asset_pools = get_assetpool(template_pool_itr->token_share.symbol.code().raw());
+    assetpools_t asset_pools = get_assetpool(token_itr->maximum_supply.symbol.code().raw());
 
-    asset_pools.emplace(receiver, [&](auto& new_pool) {
-        new_pool.asset_id = asset_id;
-    });
-
-    name pool = find_asset_pool(issued_tokens);
-
-    if (pool != get_self()) {
-        vector<uint64_t> asset_ids = {};
-        asset_ids.push_back(asset_id);
-
-        action(
-            permission_level{get_self(), name("active")},
-            name("atomicassets"),
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                pool,
-                asset_ids,
-                string("Storing " + to_string(asset_id))
-            )
-        ).send();
+    auto itr = asset_pools.find(asset_id);
+    if (itr == asset_pools.end()) {
+        asset_pools.emplace(tokenizer, [&](auto& new_pool) {
+            new_pool.asset_id = asset_id;
+            new_pool.issued_tokens = issued_tokens;
+        });
+    } else {
+        check(false, ("Asset already in Pool: " + to_string(asset_id)).c_str());
     }
 
     action(
         permission_level{get_self(), name("active")},
-        RWAX_TOKEN_CONTRACT,
+        token_itr->contract,
         name("transfer"),
         make_tuple(
             get_self(),
-            receiver,
+            tokenizer,
             issued_tokens,
             string("Tokenized Asset " + to_string(asset_id))
+        )
+    ).send();
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("logtokenize"),
+        make_tuple(
+            asset_id,
+            tokenizer,
+            issued_tokens,
+            token_itr->contract
         )
     ).send();
 }
@@ -463,49 +502,37 @@ ACTION rwax::init() {
     config.get_or_create(get_self(), config_s{});
 }
 
+ACTION rwax::logtokenize(
+    uint64_t asset_id,
+    name tokenizer,
+    asset issued_tokens,
+    name contract
+) {
+    require_auth(get_self());
+}
+
 ACTION rwax::settokenfee(
     asset fees
 ) {
+    require_auth(get_self());
     config_s current_config = config.get();
-    current_config.redeem_fees = fees;
+    current_config.tokenize_fees = fees;
     config.set(current_config, get_self());
 }
 
 ACTION rwax::setredeemfee(
     asset fees
 ) {
-    config_s current_config = config.get();
-    current_config.tokenize_fees = fees;
-    config.set(current_config, get_self());
-}
-
-ACTION rwax::addstakepool(
-    name pool,
-    symbol reward_token,
-    symbol stake_token
-) {
     require_auth(get_self());
-
-    stakepools_t stakepools = get_stakepools(pool);
-
-    auto pool_itr = stakepools.find(pool.value);
-    check(pool_itr == stakepools.end(), "Pool already exists");
-
-    stakepools.emplace(get_self(), [&](auto& _pool) {
-        _pool.reward_token = reward_token;
-        _pool.stake_token = stake_token;
-    });
-
     config_s current_config = config.get();
-    vector<name> current_pools = current_config.stake_pools;
-    current_pools.push_back(pool);
-    current_config.stake_pools = current_pools;
+    current_config.redeem_fees = fees;
     config.set(current_config, get_self());
 }
 
 ACTION rwax::redeem(
     name redeemer,
-    TOKEN_BALANCE amount
+    TOKEN_BALANCE amount,
+    uint64_t asset_id
 ) {
     require_auth(redeemer);
 
@@ -542,12 +569,12 @@ ACTION rwax::redeem(
     }
 
     assetpools_t asset_pools = get_assetpool(amount.quantity.symbol.code().raw());
-    auto apool_itr = asset_pools.begin();
-    check(apool_itr != asset_pools.end(), "No assets available");
 
-    name asset_pool = find_asset_pool(issued_supply);
+    bool matched = false;
 
-    assets_t asset_pool_assets = get_assets(asset_pool);
+    auto apool_itr = asset_pools.require_find(asset_id, "Asset not found");
+
+    assets_t asset_pool_assets = get_assets(get_self());
 
     auto asset_itr = asset_pool_assets.find(apool_itr->asset_id);
 
@@ -559,38 +586,24 @@ ACTION rwax::redeem(
 
     asset required_amount = calculate_issued_tokens(apool_itr->asset_id, asset_itr->template_id);
 
-    if (required_amount.amount < amount.quantity.amount) {
-        check(false, ("Invalid amount. Must transfer exactly " + required_amount.to_string()).c_str());
-    }
+    check(required_amount.amount == amount.quantity.amount, ("Must transfer exactly " + required_amount.to_string()).c_str());
 
     asset_pools.erase(apool_itr);
 
-    if (asset_pool == get_self()) {
-        vector<uint64_t> asset_ids = {};
-        asset_ids.push_back(asset_itr->asset_id);
+    vector<uint64_t> asset_ids = {};
+    asset_ids.push_back(asset_itr->asset_id);
 
-        action(
-            permission_level{get_self(), name("active")},
-            name("atomicassets"),
-            name("transfer"),
-            make_tuple(
-                get_self(),
-                redeemer,
-                asset_ids,
-                string("Redeeming from RWAX")
-            )
-        ).send();
-    } else {
-        action(
-            permission_level{get_self(), name("active")},
-            asset_pool,
-            name("redeem"),
-            make_tuple(
-                redeemer,
-                asset_itr->asset_id
-            )
-        ).send();
-    }
+    action(
+        permission_level{get_self(), name("active")},
+        name("atomicassets"),
+        name("transfer"),
+        make_tuple(
+            get_self(),
+            redeemer,
+            asset_ids,
+            string("Redeeming from RWAX")
+        )
+    ).send();
 
     tokens.modify(token_itr, same_payer, [&](auto& modified_item) {
         modified_item.issued_supply = modified_item.issued_supply - required_amount;

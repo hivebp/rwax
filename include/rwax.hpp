@@ -11,8 +11,10 @@ using namespace eosio;
 using namespace atomicdata;
 
 static constexpr name CORE_TOKEN_CONTRACT = name("eosio.token");
+//static constexpr name RWAX_TOKEN_CONTRACT = name("hivewaxtoken");
 static constexpr name RWAX_TOKEN_CONTRACT = name("token.rwax");
 static constexpr symbol CORE_SYMBOL = symbol("WAX", 8);
+static constexpr symbol FEE_SYMBOL = symbol("RWAX", 8);
 
 struct TOKEN {
     name   token_contract;
@@ -31,7 +33,7 @@ struct POOL {
 
 struct TEMPLATE {
     int32_t template_id;
-    uint32_t max_assets_to_tokonize;
+    uint32_t max_assets_to_tokenize;
 };
 
 struct VALUEFACTOR {
@@ -45,19 +47,10 @@ struct TRAITFACTOR {
     float max_value;
     float min_factor;
     float max_factor;
+    //float avg_factor;
+    //asset token_share;
     vector<VALUEFACTOR> values;
 };
-
-ACTION tokenize(
-    name authorized_account,
-    name collection_name,
-    asset maximum_supply,
-    vector<TEMPLATE> templates,
-    vector<TRAITFACTOR> trait_factors,
-    string token_name,
-    string token_logo,
-    string token_logo_lg
-);
 
 CONTRACT rwax : public contract {
 public:
@@ -96,6 +89,13 @@ public:
         vector<uint64_t> asset_ids
     );
 
+    ACTION logtokenize(
+        uint64_t asset_id,
+        name tokenizer,
+        asset issued_tokens,
+        name contract
+    );
+
     ACTION settokenfee(
         asset fees
     );
@@ -106,7 +106,8 @@ public:
 
     ACTION erasetoken(
         name authorized_account,
-        TOKEN_BALANCE token
+        name contract,
+        symbol token_symbol
     );
 
     ACTION withdraw(
@@ -116,13 +117,8 @@ public:
 
     ACTION redeem(
         name redeemer,
-        TOKEN_BALANCE amount
-    );
-
-    ACTION addstakepool(
-        name pool,
-        symbol reward_token,
-        symbol stake_token
+        TOKEN_BALANCE amount,
+        uint64_t asset_id
     );
 private:
     asset calculate_issued_tokens(
@@ -232,6 +228,7 @@ private:
         name authorized_account;
         name collection_name;
         vector<TEMPLATE> templates;
+        //uint32_t max_assets_to_tokenize;
 
         uint64_t primary_key() const { return (uint64_t) maximum_supply.symbol.code().raw(); } 
     };
@@ -241,8 +238,8 @@ private:
         vector<TOKEN_BALANCE> assets;
 
         uint64_t primary_key() const { return account.value; };
-    };
-
+    };    
+    
     TABLE stakes_s {
         name staker;
         asset amount;
@@ -250,7 +247,7 @@ private:
 
         uint64_t primary_key() const { return (uint64_t) staker.value; } 
     };
-
+    
     TABLE stakepools_s {
         symbol reward_token;
         symbol stake_token;
@@ -273,9 +270,9 @@ private:
 
     TABLE templpools_s {
         int32_t template_id;
-        uint32_t max_assets_to_tokonize;
+        uint32_t max_assets_to_tokenize;
         uint32_t currently_tokenized;
-        asset token_share;
+        asset token;
         name contract;
 
         uint64_t primary_key() const { return (uint64_t) template_id; } 
@@ -290,6 +287,7 @@ private:
 
     TABLE assetpools_s {
         uint64_t asset_id;
+        asset issued_tokens;
 
         uint64_t primary_key() const { return (uint64_t) asset_id; } 
     };
@@ -300,9 +298,9 @@ private:
     typedef eosio::multi_index<name("tokens"), tokens_s> tokens_t;
     typedef eosio::multi_index<name("templpools"), templpools_s> templpools_t;
     typedef eosio::multi_index<name("assetpools"), assetpools_s> assetpools_t;
-    typedef eosio::multi_index<name("stakes"), stakes_s> stakes_t;
     typedef eosio::multi_index<name("transfers"), transfers_s> transfers_t;
     typedef eosio::multi_index<name("balances"), balances_s> balances_t;
+    typedef eosio::multi_index<name("stakes"), stakes_s> stakes_t;
     typedef eosio::multi_index<name("rewards"), rewards_s> rewards_t;
     typedef eosio::multi_index<name("stakepools"), stakepools_s> stakepools_t;
     typedef eosio::multi_index<name("traitfactors"), traitfactors_s> traitfactors_t;
@@ -332,14 +330,6 @@ private:
     
     assetpools_t get_assetpool(uint64_t symbolraw) {
         return assetpools_t(get_self(), symbolraw);
-    }
-    
-    stakes_t get_stakes(uint64_t symbolraw) {
-        return stakes_t(get_self(), symbolraw);
-    }
-    
-    stakepools_t get_stakepools(name pool) {
-        return stakepools_t(get_self(), pool.value);
     }
 
     schemas_t get_schemas(name collection_name) {
