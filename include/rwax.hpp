@@ -47,8 +47,8 @@ struct TRAITFACTOR {
     float max_value;
     float min_factor;
     float max_factor;
-    //float avg_factor;
-    //asset token_share;
+    float avg_factor;
+    asset token_share;
     vector<VALUEFACTOR> values;
 };
 
@@ -70,23 +70,61 @@ public:
         string memo
     );
 
+    [[eosio::action, eosio::read_only]] asset calctokens(
+        uint64_t asset_id, 
+        name owner
+    );
+
+    [[eosio::action, eosio::read_only]] asset redeemamount(
+        asset token,
+        uint64_t asset_id
+    );
+
     ACTION init();
+
+    ACTION testcalc(
+        asset token,
+        uint64_t asset_id
+    );
+
+    ACTION logtest(
+        asset tokens
+    );
 
     ACTION createtoken(
         name authorized_account,
         name collection_name,
+        name schema_name,
         asset maximum_supply,
         name contract,
-        vector<TEMPLATE> templates,
+        uint32_t max_assets_to_tokenize,
         vector<TRAITFACTOR> trait_factors,
         string token_name,
         string token_logo,
-        string token_logo_lg
+        string token_logo_lg,
+        symbol fee_currency
+    );
+
+    ACTION setfactors(
+        name authorized_account,
+        name collection_name,
+        asset maximum_supply,
+        name contract,
+        vector<TRAITFACTOR> trait_factors
+    );
+
+    ACTION setmaxassets(
+        name authorized_account,
+        name collection_name,
+        asset maximum_supply,
+        name contract,
+        uint32_t max_assets_to_tokenize
     );
 
     ACTION tokenizenfts(
         name user,
-        vector<uint64_t> asset_ids
+        vector<uint64_t> asset_ids,
+        symbol fee_currency
     );
 
     ACTION logtokenize(
@@ -111,19 +149,46 @@ public:
     );
 
     ACTION withdraw(
-        vector<TOKEN_BALANCE> tokens,
+        name contract,
+        vector<asset> tokens,
         name account
     );
 
     ACTION redeem(
         name redeemer,
-        TOKEN_BALANCE amount,
-        uint64_t asset_id
+        name contract,
+        asset quantity,
+        uint64_t asset_id,
+        symbol fee_currency
+    );
+
+    ACTION buyrwax(
+        asset amount,
+        name buyer
+    );
+
+    ACTION addrwax(
+        asset amount
+    );
+
+    ACTION addfeetoken(
+        asset fee,
+        name contract,
+        uint64_t alcor_id
+    );
+
+    ACTION initschemas(
+        name collection_name,
+        name schema_name,
+        uint32_t max_assets_to_tokenize,
+        uint32_t currently_tokenized,
+        asset maximum_supply,
+        name contract
     );
 private:
     asset calculate_issued_tokens(
-        uint64_t asset_id, 
-        int32_t template_id
+        name account,
+        uint64_t asset_id
     );
 
     void withdraw_balances(
@@ -154,7 +219,8 @@ private:
     
     void tokenize_asset(
         uint64_t asset_id,
-        name receiver
+        name receiver,
+        symbol fee_currency
     );
 
     name find_asset_pool(
@@ -212,6 +278,15 @@ private:
         uint64_t primary_key() const { return (uint64_t) template_id; }
     };
 
+    struct pools_s {
+        uint64_t id;
+        bool active;
+        extended_asset tokenA;
+        extended_asset tokenB;
+
+        uint64_t primary_key() const { return id; }
+  };
+
     struct schemas_s {
         name            schema_name;
         vector <FORMAT> format;
@@ -227,10 +302,18 @@ private:
         name contract;
         name authorized_account;
         name collection_name;
-        vector<TEMPLATE> templates;
-        //uint32_t max_assets_to_tokenize;
+        name schema_name;
+        uint32_t max_assets_to_tokenize;
 
         uint64_t primary_key() const { return (uint64_t) maximum_supply.symbol.code().raw(); } 
+    };
+
+    TABLE feetokens_s {
+        asset fee;
+        name contract;
+        float exchange_rate;
+
+        uint64_t primary_key() const { return (uint64_t) fee.symbol.code().raw(); } 
     };
 
     TABLE balances_s {
@@ -238,21 +321,6 @@ private:
         vector<TOKEN_BALANCE> assets;
 
         uint64_t primary_key() const { return account.value; };
-    };    
-    
-    TABLE stakes_s {
-        name staker;
-        asset amount;
-        vector<asset> rewarded_tokens;
-
-        uint64_t primary_key() const { return (uint64_t) staker.value; } 
-    };
-    
-    TABLE stakepools_s {
-        symbol reward_token;
-        symbol stake_token;
-
-        uint64_t primary_key() const { return (uint64_t) reward_token.code().raw(); } 
     };
 
     TABLE rewards_s {
@@ -261,6 +329,13 @@ private:
         uint64_t primary_key() const { return (uint64_t) amount.symbol.code().raw(); } 
     };
 
+    TABLE tokensale_s {
+        asset amount;
+    };
+
+    typedef singleton <name("tokensale"), tokensale_s>           tokensale_t;
+    typedef multi_index <name("tokensale"), tokensale_s>         tokensale_t_for_abi;
+
     TABLE traitfactors_s {
         symbol token;
         vector<TRAITFACTOR> trait_factors;
@@ -268,14 +343,14 @@ private:
         uint64_t primary_key() const { return (uint64_t) token.code().raw(); } 
     };
 
-    TABLE templpools_s {
-        int32_t template_id;
+    TABLE schemamap_s {
+        name schema_name;
         uint32_t max_assets_to_tokenize;
         uint32_t currently_tokenized;
         asset token;
         name contract;
 
-        uint64_t primary_key() const { return (uint64_t) template_id; } 
+        uint64_t primary_key() const { return schema_name.value; }
     };
 
     TABLE transfers_s {
@@ -295,25 +370,32 @@ private:
     typedef eosio::multi_index<name("collections"), collections_s> collections_t;
     typedef eosio::multi_index<name("assets"), assets_s> assets_t;
     typedef eosio::multi_index<name("templates"), templates_s> templates_t;
+    typedef eosio::multi_index<name("pools"), pools_s> pools_t;
     typedef eosio::multi_index<name("tokens"), tokens_s> tokens_t;
-    typedef eosio::multi_index<name("templpools"), templpools_s> templpools_t;
+    typedef eosio::multi_index<name("feetokens"), feetokens_s> feetokens_t;
+    typedef eosio::multi_index<name("schemamap"), schemamap_s> schemamap_t;
     typedef eosio::multi_index<name("assetpools"), assetpools_s> assetpools_t;
     typedef eosio::multi_index<name("transfers"), transfers_s> transfers_t;
     typedef eosio::multi_index<name("balances"), balances_s> balances_t;
-    typedef eosio::multi_index<name("stakes"), stakes_s> stakes_t;
     typedef eosio::multi_index<name("rewards"), rewards_s> rewards_t;
-    typedef eosio::multi_index<name("stakepools"), stakepools_s> stakepools_t;
     typedef eosio::multi_index<name("traitfactors"), traitfactors_s> traitfactors_t;
     typedef eosio::multi_index <name("schemas"), schemas_s> schemas_t;
     
     collections_t collections = collections_t(name("atomicassets"), name("atomicassets").value);
-    templpools_t templpools = templpools_t(get_self(), get_self().value);
+    pools_t pools = pools_t(name("swap.alcor"), name("swap.alcor").value);
+    
     transfers_t transfers = transfers_t(get_self(), get_self().value);
+    feetokens_t feetokens = feetokens_t(get_self(), get_self().value);
     balances_t balances = balances_t(get_self(), get_self().value);
     config_t config = config_t(get_self(), get_self().value);
+    tokensale_t tokensale = tokensale_t(get_self(), get_self().value);
 
     tokens_t get_tokens(name contract) {
         return tokens_t(get_self(), contract.value);
+    }
+
+    schemamap_t get_schemamap(name collection) {
+        return schemamap_t(get_self(), collection.value);
     }
 
     traitfactors_t get_traitfactors(name contract) {
